@@ -125,6 +125,9 @@ func Start(currentVersion string) error {
 	if d := config.CurrentDesktop(); d.WatchDir != "" {
 		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
 	}
+	// Theme files and their stylesheets repaint every open dashboard as they are saved.
+	_ = os.MkdirAll(config.ThemesDir(), 0755)
+	_ = watchDesktopTheme(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
@@ -337,6 +340,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
+	mux.HandleFunc("/api/theme.css", withCORS(handleUserCSS))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
