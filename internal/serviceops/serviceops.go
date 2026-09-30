@@ -1152,15 +1152,8 @@ func EnsureServiceRunning(name string) error {
 			return err
 		}
 	}
-	// Starting a unit whose image is absent lets podman pull it silently in the
-	// middle of the start, with no size and no way to opt out. Pull it here
-	// instead, so the download is announced first and offline mode sees it.
-	if img, _ := serviceImageRefs(name); img != "" && !podman.ImageExists(img) {
-		bytes, _ := imagepull.Size(img)
-		fmt.Printf("  Pulling %s%s for %s\n", img, imagepull.Note(bytes), name)
-		if err := podman.PullImageTo(img, os.Stdout); err != nil {
-			return err
-		}
+	if err := pullStartImage(name); err != nil {
+		return err
 	}
 	if err := startUnitRetry(unit); err != nil {
 		return err
@@ -1489,8 +1482,9 @@ func dynamicEnvConsumers() []*config.CustomService {
 		installed[c.Name] = true
 	}
 	for _, name := range config.DefaultPresetNames() {
-		// A removed default has no unit to refresh, and writing one brings it back.
-		if installed[name] || config.ServiceIsRemoved(name) {
+		// A removed or never-installed default has no unit to refresh, and
+		// writing one installs it.
+		if installed[name] || config.ServiceIsRemoved(name) || !ServiceInstalled(name) {
 			continue
 		}
 		meta, err := config.DefaultPresetMeta(name)
