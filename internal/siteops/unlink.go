@@ -64,6 +64,10 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 		StopSiteWorkers(site)
 	}
 	StopSiteShares(site.Name)
+	// The site's env_provider secrets have nothing left to serve.
+	if f := config.ProvidedEnvFile(site.Name); f != "" {
+		_ = os.Remove(f)
+	}
 
 	_ = nginx.RemoveVhost(site.PrimaryDomain())
 	// The site's worktrees are served by subdomain vhosts of their own, and

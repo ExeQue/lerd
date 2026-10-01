@@ -568,6 +568,10 @@ func runEnvIfManaged(cwd string, fn func() error) {
 }
 
 // NewEnvCmd returns the env command.
+// envAssumeYes is `lerd env --yes`: approve the project's env_provider without
+// a prompt, for terminals lerd cannot ask on.
+var envAssumeYes bool
+
 func NewEnvCmd() *cobra.Command {
 	var verbose bool
 	cmd := &cobra.Command{
@@ -593,6 +597,7 @@ func NewEnvCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Print detailed per-service output (used by the MCP server)")
+	cmd.Flags().BoolVarP(&envAssumeYes, "yes", "y", false, "Approve the project's env_provider host command without prompting, and remember it")
 	return cmd
 }
 
@@ -796,6 +801,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	site, branch, err := ensureSiteAndBranchForCwd()
 	if err != nil {
 		return err
+	}
+	if err := refreshProvidedEnv(*site, envAssumeYes); err != nil {
+		feedback.Warn("%v", err)
 	}
 
 	fwName := site.Framework

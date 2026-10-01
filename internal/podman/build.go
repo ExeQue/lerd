@@ -1066,6 +1066,9 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.SharedIniPath}}", config.SharedIniFile())
 	content = strings.ReplaceAll(content, "{{.OdbcInstMountLine}}", odbcFPMMountLines())
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
+	mount, pre := providedEnvLines()
+	content = strings.ReplaceAll(content, "{{.ProvidedEnvMountLine}}", mount)
+	content = strings.ReplaceAll(content, "{{.ProvidedEnvExecStartPre}}", pre)
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 	content = strings.ReplaceAll(content, "{{.MailIniPath}}", config.MailIniFile())
@@ -1077,6 +1080,17 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 	return content, nil
+}
+
+// providedEnvLines mounts the tmpfs env_provider dir into FPM, read-only. The
+// dir is created before start because a reboot empties tmpfs and podman refuses
+// a missing bind source. Rendered empty where the feature is off.
+func providedEnvLines() (mount, execStartPre string) {
+	if config.ProvidedEnvDir() == "" {
+		return "", ""
+	}
+	return "Volume=%t/lerd/env:" + config.ProvidedEnvContainerDir + ":ro",
+		"ExecStartPre=/bin/mkdir -p -m 0700 %t/lerd/env"
 }
 
 // RewriteFPMQuadlets regenerates the quadlet files for all installed PHP-FPM

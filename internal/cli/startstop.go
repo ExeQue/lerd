@@ -1058,6 +1058,11 @@ func restoreSiteInfrastructure() {
 			}
 		}
 
+		// The provided-env file lives on tmpfs and is gone after a reboot.
+		if err := refreshProvidedEnv(s, false); err != nil {
+			feedback.Warn("%s: %v", s.Name, err)
+		}
+
 		// Restore the per-site quadlet (and image, if missing) for custom-FPM
 		// PHP sites, so they come back up on `lerd start` after a reinstall.
 		if s.IsCustomFPM() {
