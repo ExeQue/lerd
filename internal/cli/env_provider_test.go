@@ -8,8 +8,9 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// Console commands (lerd artisan …) must carry LERD_SITE, or the prepend
-// cannot pick the site's provided env and artisan runs without its secrets.
+// Console commands, both the user's (lerd artisan …) and the ones lerd env runs
+// itself, must carry LERD_SITE, or the prepend cannot pick the site's provided
+// env and artisan runs without its secrets.
 func TestConsoleCmdArgs_CarriesLerdSite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -19,13 +20,23 @@ func TestConsoleCmdArgs_CarriesLerdSite(t *testing.T) {
 	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{site}}); err != nil {
 		t.Fatalf("SaveSites: %v", err)
 	}
-	args := consoleCmdArgs(site.Path, "lerd-php85-fpm", "artisan", false, []string{"about"})
-	for i, a := range args {
-		if a == "LERD_SITE=app" && i > 0 && args[i-1] == "--env" {
-			return
+	for name, args := range map[string][]string{
+		"lerd console":        consoleCmdArgs(site.Path, "lerd-php85-fpm", "artisan", false, []string{"about"}),
+		"lerd env's own runs": consoleExecArgs(site.Path, "8.5", "artisan", "key:generate"),
+	} {
+		if !hasEnvArg(args, "LERD_SITE=app") {
+			t.Errorf("%s exec is missing --env LERD_SITE=app: %v", name, args)
 		}
 	}
-	t.Errorf("console exec is missing --env LERD_SITE=app: %v", args)
+}
+
+func hasEnvArg(args []string, want string) bool {
+	for i, a := range args {
+		if a == want && i > 0 && args[i-1] == "--env" {
+			return true
+		}
+	}
+	return false
 }
 
 func TestValidProvidedEnvSite(t *testing.T) {
