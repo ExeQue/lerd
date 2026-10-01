@@ -1082,17 +1082,6 @@ func renderFPMQuadletContent(version string) (string, error) {
 	return content, nil
 }
 
-// providedEnvLines mounts the tmpfs env_provider dir into FPM, read-only. The
-// dir is created before start because a reboot empties tmpfs and podman refuses
-// a missing bind source. Rendered empty where the feature is off.
-func providedEnvLines() (mount, execStartPre string) {
-	if config.ProvidedEnvDir() == "" {
-		return "", ""
-	}
-	return "Volume=%t/lerd/env:" + config.ProvidedEnvContainerDir + ":ro",
-		"ExecStartPre=/bin/mkdir -p -m 0700 %t/lerd/env"
-}
-
 // RewriteFPMQuadlets regenerates the quadlet files for all installed PHP-FPM
 // versions and the nginx quadlet. Call this when parked directories or site
 // paths change so that extra volume mounts stay in sync.

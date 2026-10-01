@@ -305,9 +305,44 @@ Web requests and workers run in long-lived processes, so there is no wrapper to 
 env_provider: infisical export --env=dev --path=/my-app --format=dotenv --silent
 ```
 
+Any command that prints `KEY=value` lines to stdout works. Some common providers:
+
+```yaml
+# Infisical
+env_provider: infisical export --env=dev --path=/my-app --format=dotenv --silent
+
+# Doppler
+env_provider: doppler secrets download --no-file --format env --project my-app --config dev
+
+# 1Password, filling op:// references in a committed template
+env_provider: op inject -i .env.secrets.tpl
+
+# Bitwarden Secrets Manager
+env_provider: bws secret list <project-id> --output env
+
+# sops, decrypting a committed encrypted dotenv file
+env_provider: sops decrypt --output-type dotenv secrets.enc.env
+
+# HashiCorp Vault, KV v2
+env_provider: vault kv get -format=json secret/my-app | jq -r '.data.data | to_entries[] | "\(.key)=\(.value)"'
+
+# AWS Secrets Manager, a secret holding a JSON object
+env_provider: aws secretsmanager get-secret-value --secret-id my-app/dev --query SecretString --output text | jq -r 'to_entries[] | "\(.key)=\(.value)"'
+```
+
+The command runs through `sh -c`, so pipes work, which is also how to keep the provider to the secrets alone when it would otherwise export everything, connection settings included:
+
+```yaml
+env_provider: >-
+  infisical export --env=dev --path=/my-app --format=dotenv --silent
+  | grep -E '^(STRIPE_SECRET|MAILGUN_SECRET|AWS_SECRET_ACCESS_KEY)='
+```
+
 On `lerd env` and `lerd start`, lerd runs the command on the host from the project directory and writes its output to `$XDG_RUNTIME_DIR/lerd/env/<site>.env`. That directory is tmpfs, owner-only, and mounted read-only into the FPM containers at `/run/lerd/env`. The first run asks for approval, like any project-supplied host command, and an unapproved provider is skipped with a warning when there is no terminal to ask on. `lerd env --yes` approves it without the prompt and remembers the approval, for scripts and editors that run commands without a terminal.
 
 lerd's always-on PHP prepend reads the file for the site named by `LERD_SITE`, which nginx sets for web requests and lerd sets for workers and the CLI commands it runs, and populates `getenv()`, `$_ENV` and `$_SERVER` before the framework boots. A variable the process already has wins, and frameworks that read the real environment before `.env`, Laravel and Symfony among them, see the provided values over the file's. Keep connection settings such as `DB_HOST` in `.env`: lerd writes them there, and a provider exporting your production or shared-dev hosts would otherwise override them.
+
+On macOS the FPM containers run inside the Podman Machine VM, so the file lives in the VM's tmpfs at `/run/lerd/env` instead. lerd writes it over `podman machine ssh`, passing the values on stdin, so they go from the provider straight into the VM's memory without touching the Mac's disk or showing up in a process list. A machine restart empties it until the next `lerd start`. The [native runtime](../features/native-runtime.md) has no VM and no tmpfs on the host, so `env_provider` is not supported there yet and `lerd env` says so.
 
 Re-run `lerd env` to pick up changed secrets; the next request sees them, no restart needed. The file is gone after a reboot until `lerd start` runs the provider again. A config cache puts the values back on disk (`php artisan config:cache` writes every resolved value into `bootstrap/cache/config.php`), so don't cache config locally.
 

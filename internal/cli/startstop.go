@@ -1021,6 +1021,9 @@ func restoreSiteInfrastructure() {
 		return
 	}
 
+	// FPM mounts the provided-env dir, so it has to exist before FPM starts.
+	ensureProvidedEnvDir()
+
 	seenPHP := map[string]bool{}
 	seenSvc := map[string]bool{}
 	dirty := false

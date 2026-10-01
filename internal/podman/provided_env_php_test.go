@@ -49,6 +49,14 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		}
 	}
 
+	preflight := filepath.Join(dir, "preflight.php")
+	if err := os.WriteFile(preflight, []byte("<?php echo file_exists("+phpQuote(bridgePath)+") ? 'Y' : 'N';"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := exec.Command(php, "-n", preflight).CombinedOutput(); !strings.Contains(string(out), "Y") {
+		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
+	}
+
 	run := func(site, probeDir string) string {
 		probe := filepath.Join(probeDir, "probe.php")
 		cmd := exec.Command(php, "-n", "-d", "auto_prepend_file="+bridgePath, "-d", "lerd.provided_env_dir="+envDir, probe)
@@ -61,9 +69,7 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	}
 
 	nothing := `[false,null,null,"from-process"]`
-	if out := run("app", siteDir); !strings.HasPrefix(out, "[") {
-		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
-	} else if want := `["one","two words","a\nb","from-process"]`; out != want {
+	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process"]`; out != want {
 		t.Errorf("loaded env = %s, want %s", out, want)
 	}
 	if out := run("../secret", siteDir); out != nothing {
@@ -74,22 +80,26 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	}
 }
 
-// TestFPMQuadlet_MountsProvidedEnvDir checks the FPM unit mounts the tmpfs
-// provided-env dir read-only and creates it before start.
-func TestFPMQuadlet_MountsProvidedEnvDir(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
-	mount, pre := providedEnvLines()
-	if mount == "" {
-		t.Skip("provided env is Linux-only")
+// TestFPMQuadlet_ProvidedEnvLinesPerPlatform checks the FPM unit mounts the
+// provided-env dir read-only where it exists, and nothing where it does not.
+func TestFPMQuadlet_ProvidedEnvLinesPerPlatform(t *testing.T) {
+	cases := []struct {
+		name          string
+		goos          string
+		native        bool
+		xdg           string
+		mount, prestr string
+	}{
+		{"linux", "linux", false, "/run/user/1000", "Volume=%t/lerd/env:/run/lerd/env:ro", "ExecStartPre=/bin/mkdir -p -m 0700 %t/lerd/env"},
+		{"linux without runtime dir", "linux", false, "", "", ""},
+		{"macOS container runtime", "darwin", false, "", "Volume=/run/lerd/env:/run/lerd/env:ro", ""},
+		{"macOS native runtime", "darwin", true, "", "", ""},
+		{"other", "windows", false, "", "", ""},
 	}
-	if mount != "Volume=%t/lerd/env:/run/lerd/env:ro" {
-		t.Errorf("mount = %q", mount)
-	}
-	if !strings.Contains(pre, "mkdir -p -m 0700 %t/lerd/env") {
-		t.Errorf("ExecStartPre = %q", pre)
-	}
-	t.Setenv("XDG_RUNTIME_DIR", "")
-	if m, p := providedEnvLines(); m != "" || p != "" {
-		t.Errorf("without a runtime dir nothing is mounted, got %q %q", m, p)
+	for _, c := range cases {
+		mount, pre := providedEnvLinesFor(c.goos, c.native, c.xdg)
+		if mount != c.mount || pre != c.prestr {
+			t.Errorf("%s: got %q %q, want %q %q", c.name, mount, pre, c.mount, c.prestr)
+		}
 	}
 }

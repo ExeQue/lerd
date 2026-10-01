@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,16 +18,16 @@ import (
 // file removed so secrets do not outlive the setting. approve records consent
 // up front, for `lerd env --yes` where there is no terminal to prompt on.
 func refreshProvidedEnv(site config.Site, approve bool) error {
-	file := config.ProvidedEnvFile(site.Name)
 	proj, _ := config.LoadProjectConfig(site.Path)
 	if proj == nil || proj.EnvProvider == "" {
-		if file != "" {
-			_ = os.Remove(file)
-		}
+		dropProvidedEnv(site.Name)
 		return nil
 	}
-	if file == "" {
-		return errors.New("env_provider needs a tmpfs runtime dir (XDG_RUNTIME_DIR) and is Linux-only for now")
+	if err := providedEnvSupported(); err != nil {
+		return err
+	}
+	if !validProvidedEnvSite(site.Name) {
+		return fmt.Errorf("env_provider: site name %q cannot name a provided env file", site.Name)
 	}
 	if approve {
 		if err := config.ApproveSiteCommand(site.Name, proj.EnvProvider); err != nil {
@@ -47,7 +46,21 @@ func refreshProvidedEnv(site config.Site, approve bool) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("env_provider failed: %w", err)
 	}
-	return writeProvidedEnv(file, append(providedEnvHeader(site), stdout.Bytes()...))
+	return storeProvidedEnv(site.Name, append(providedEnvHeader(site), stdout.Bytes()...))
+}
+
+// validProvidedEnvSite mirrors the prepend's check on LERD_SITE, so a name lerd
+// writes is one PHP will read, and it is safe inside a path or a shell word.
+func validProvidedEnvSite(name string) bool {
+	if name == "" || strings.Contains(name, "..") {
+		return false
+	}
+	for _, r := range name {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // providedEnvHeader names the directories the file may be loaded from: the site
@@ -71,26 +84,4 @@ func providedEnvHeader(site config.Site) []byte {
 		fmt.Fprintf(&b, "#lerd-root=%s\n", r)
 	}
 	return b.Bytes()
-}
-
-// writeProvidedEnv replaces the file atomically with owner-only permissions, so
-// PHP never reads a half-written file and no other user can read it.
-func writeProvidedEnv(file string, data []byte) error {
-	dir := filepath.Dir(file)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".provided-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), file)
 }

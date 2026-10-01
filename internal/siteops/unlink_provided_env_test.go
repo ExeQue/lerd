@@ -27,6 +27,8 @@ func TestTeardownSite_RemovesProvidedEnv(t *testing.T) {
 	if err := os.WriteFile(file, []byte("SECRET=x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	RemoveProvidedEnv = func(name string) { _ = os.Remove(config.ProvidedEnvFile(name)) }
+	t.Cleanup(func() { RemoveProvidedEnv = nil })
 	TeardownSite(&config.Site{Name: "app", Path: t.TempDir(), Domains: []string{"app.test"}}, nil)
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Errorf("provided env should be removed on unlink: %v", err)
