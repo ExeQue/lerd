@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -34,26 +36,57 @@ func ensureProvidedEnvDir() {
 	if providedEnvSupported() != nil {
 		return
 	}
-	if err := providedEnvSSH(providedEnvMkdirScript(), nil); err != nil {
+	if err := providedEnvSSH(providedEnvMkdirScript(), nil, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "creating %s in the Podman Machine: %v\n", podman.ProvidedEnvVMDir, err)
 	}
 }
 
 func storeProvidedEnv(siteName string, data []byte) error {
-	return providedEnvSSH(providedEnvWriteScript(siteName), data)
+	if err := providedEnvSSH(providedEnvWriteScript(siteName), data, nil); err != nil {
+		return err
+	}
+	if files := providedEnvVMFiles(); files != nil {
+		files[siteName+".env"] = true
+	}
+	return nil
 }
 
+// dropProvidedEnv only reaches into the VM for a file that is there, so sites
+// without a provider cost no ssh round-trip each on lerd start and lerd env.
 func dropProvidedEnv(siteName string) {
 	if !validProvidedEnvSite(siteName) || providedEnvSupported() != nil {
 		return
 	}
-	_ = providedEnvSSH(providedEnvRemoveScript(siteName), nil)
+	files := providedEnvVMFiles()
+	if files != nil && !files[siteName+".env"] {
+		return
+	}
+	if providedEnvSSH(providedEnvRemoveScript(siteName), nil, nil) == nil && files != nil {
+		delete(files, siteName+".env")
+	}
 }
 
-func providedEnvSSH(script string, stdin []byte) error {
+// providedEnvVMFiles lists the VM's provided-env dir once per process. nil when
+// the listing failed, so callers fall back to trying the removal anyway.
+var providedEnvVMFiles = sync.OnceValue(func() map[string]bool {
+	var out bytes.Buffer
+	if err := providedEnvSSH(providedEnvListScript(), nil, &out); err != nil {
+		return nil
+	}
+	files := map[string]bool{}
+	for _, f := range strings.Fields(out.String()) {
+		files[f] = true
+	}
+	return files
+})
+
+func providedEnvSSH(script string, stdin []byte, stdout *bytes.Buffer) error {
 	cmd := podman.Cmd(providedEnvSSHArgs(selectedMachineName(), script)...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	if stdout != nil {
+		cmd.Stdout = stdout
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

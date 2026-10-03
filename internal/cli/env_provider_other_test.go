@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 func providerSite(t *testing.T, provider string) config.Site {
@@ -103,5 +104,24 @@ func TestRefreshProvidedEnv_YesApprovesAndRemembers(t *testing.T) {
 	}
 	if err := refreshProvidedEnv(site, false); err != nil {
 		t.Errorf("the approval should be remembered for later runs: %v", err)
+	}
+}
+
+// Unlinking a site drops its env_provider secrets through the real
+// dropProvidedEnv the CLI wires into siteops, so nothing is left for another
+// site's PHP to find.
+func TestTeardownSite_RemovesProvidedEnv(t *testing.T) {
+	site := providerSite(t, "")
+	file := config.ProvidedEnvFile(site.Name)
+	if err := writeProvidedEnv(file, []byte("SECRET=x\n")); err != nil {
+		t.Fatal(err)
+	}
+	stop := siteops.StopSiteWorkers
+	siteops.StopSiteWorkers = nil
+	t.Cleanup(func() { siteops.StopSiteWorkers = stop })
+	site.Domains = []string{"app.test"}
+	siteops.TeardownSite(&site, nil)
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("provided env should be removed on unlink: %v", err)
 	}
 }

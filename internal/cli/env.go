@@ -567,11 +567,11 @@ func runEnvIfManaged(cwd string, fn func() error) {
 	}
 }
 
-// NewEnvCmd returns the env command.
 // envAssumeYes is `lerd env --yes`: approve the project's env_provider without
 // a prompt, for terminals lerd cannot ask on.
 var envAssumeYes bool
 
+// NewEnvCmd returns the env command.
 func NewEnvCmd() *cobra.Command {
 	var verbose bool
 	cmd := &cobra.Command{

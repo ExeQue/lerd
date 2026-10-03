@@ -305,7 +305,7 @@ Web requests and workers run in long-lived processes, so there is no wrapper to 
 env_provider: infisical export --env=dev --path=/my-app --format=dotenv --silent
 ```
 
-Any command that prints `KEY=value` lines to stdout works. Some common providers:
+Any command that prints `KEY=value` lines to stdout works. Values may be quoted, and a quoted value may span several lines, so a PEM key comes through whole; an unquoted value ends at the line and drops a trailing ` # comment`. Some common providers:
 
 ```yaml
 # Infisical

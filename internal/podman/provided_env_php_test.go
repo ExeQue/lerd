@@ -9,7 +9,8 @@ import (
 )
 
 // TestDumpBridge_LoadsProvidedEnv runs the real bridge as a prepend and checks
-// it loads the site's provided-env file, unquotes values, keeps variables the
+// it loads the site's provided-env file, unquotes values (multi-line quoted
+// ones too), drops inline comments, keeps variables the
 // process already has, and loads nothing for a LERD_SITE that walks out of the
 // dir or a script outside the roots the file names.
 func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
@@ -35,14 +36,15 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherDir := t.TempDir()
-	env := "#lerd-root=" + siteDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n"
+	env := "#lerd-root=" + siteDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n" +
+		"PEM=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNOTE=bar # note\nHASH=a#b\n#lerd-root=/\n"
 	if err := os.WriteFile(filepath.Join(envDir, "app.env"), []byte(env), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "secret.env"), []byte("PLAIN=escaped\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	script := `<?php echo json_encode(array(getenv("PLAIN"), $_ENV["SINGLE"] ?? null, $_SERVER["DQ"] ?? null, getenv("KEPT")));`
+	script := `<?php echo json_encode(array(getenv("PLAIN"), $_ENV["SINGLE"] ?? null, $_SERVER["DQ"] ?? null, getenv("KEPT"), getenv("PEM"), getenv("NOTE"), getenv("HASH")));`
 	for _, d := range []string{siteDir, otherDir} {
 		if err := os.WriteFile(filepath.Join(d, "probe.php"), []byte(script), 0o644); err != nil {
 			t.Fatal(err)
@@ -68,8 +70,8 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		return strings.TrimSpace(string(out))
 	}
 
-	nothing := `[false,null,null,"from-process"]`
-	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process"]`; out != want {
+	nothing := `[false,null,null,"from-process",false,false,false]`
+	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process","-----BEGIN KEY-----\nabc\n-----END KEY-----","bar","a#b"]`; out != want {
 		t.Errorf("loaded env = %s, want %s", out, want)
 	}
 	if out := run("../secret", siteDir); out != nothing {

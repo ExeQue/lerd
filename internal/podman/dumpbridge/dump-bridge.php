@@ -34,28 +34,30 @@ namespace {
             // them gets nothing, so a wrong LERD_SITE cannot leak another site's.
             $lerdScript = isset($_SERVER['SCRIPT_FILENAME']) ? @\realpath($_SERVER['SCRIPT_FILENAME']) : false;
             $lerdAllowed = false;
+            // The header lerd writes comes first; root lines further down are
+            // provider output and widen nothing.
+            \preg_match('/\A(?:#lerd-root=[^\r\n]*\r?\n)*/', $lerdEnv, $lerdHead);
+            foreach (\preg_split('/\r?\n/', $lerdHead[0]) as $lerdLine) {
+                $root = \rtrim((string) \substr($lerdLine, 11), '/');
+                if ($root !== '' && \is_string($lerdScript) && \strpos($lerdScript, $root.'/') === 0) {
+                    $lerdAllowed = true;
+                }
+            }
+            // Quoted values may span lines (PEM keys); unquoted ones end at
+            // the line and drop a ` # comment`.
             $lerdPairs = array();
-            foreach (\preg_split('/\r?\n/', $lerdEnv) as $lerdLine) {
-                if (\strpos($lerdLine, '#lerd-root=') === 0) {
-                    $root = \rtrim(\substr($lerdLine, 11), '/');
-                    if ($root !== '' && \is_string($lerdScript) && \strpos($lerdScript, $root.'/') === 0) {
-                        $lerdAllowed = true;
-                    }
-                    continue;
-                }
-                $k = \preg_replace('/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=.*$/', '$1', $lerdLine, 1, $hit);
-                if ($hit === 0) {
-                    continue;
-                }
-                $v = \trim(\substr($lerdLine, \strpos($lerdLine, '=') + 1));
+            \preg_match_all('/^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*("(?:[^"\\\\]|\\\\.)*"|\'[^\']*\'|[^\r\n]*)/m', $lerdEnv, $lerdMatches, \PREG_SET_ORDER);
+            foreach ($lerdMatches as $lerdMatch) {
+                $v = $lerdMatch[2];
                 $q = $v === '' ? '' : $v[0];
-                if (($q === '"' || $q === "'") && \strlen($v) > 1 && \substr($v, -1) === $q) {
+                if ($q === '"' && \strlen($v) > 1 && \substr($v, -1) === '"') {
+                    $v = \strtr(\substr($v, 1, -1), array('\\n' => "\n", '\\"' => '"', '\\\\' => '\\'));
+                } elseif ($q === "'" && \strlen($v) > 1 && \substr($v, -1) === "'") {
                     $v = \substr($v, 1, -1);
-                    if ($q === '"') {
-                        $v = \strtr($v, array('\\n' => "\n", '\\"' => '"', '\\\\' => '\\'));
-                    }
+                } else {
+                    $v = \trim(\preg_replace('/(?:^|[ \t]+)#.*$/', '', $v));
                 }
-                $lerdPairs[$k] = $v;
+                $lerdPairs[$lerdMatch[1]] = $v;
             }
             if ($lerdAllowed) {
                 foreach ($lerdPairs as $k => $v) {
@@ -68,7 +70,7 @@ namespace {
                 }
             }
         }
-        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdAllowed, $lerdPairs, $lerdLine, $root, $k, $hit, $v, $q);
+        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
     }
     unset($lerdSite);
 

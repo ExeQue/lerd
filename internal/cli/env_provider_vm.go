@@ -24,3 +24,8 @@ func providedEnvWriteScript(siteName string) string {
 func providedEnvRemoveScript(siteName string) string {
 	return "sudo rm -f " + podman.ProvidedEnvVMDir + "/" + siteName + ".env"
 }
+
+// providedEnvListScript prints the dir's files, nothing when it is missing.
+func providedEnvListScript() string {
+	return "sudo ls " + podman.ProvidedEnvVMDir + " 2>/dev/null || true"
+}

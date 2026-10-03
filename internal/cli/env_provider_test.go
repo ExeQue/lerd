@@ -66,6 +66,9 @@ func TestProvidedEnvVMScripts(t *testing.T) {
 	if got := providedEnvRemoveScript("app"); got != "sudo rm -f /run/lerd/env/app.env" {
 		t.Errorf("remove script = %q", got)
 	}
+	if got := providedEnvListScript(); got != "sudo ls /run/lerd/env 2>/dev/null || true" {
+		t.Errorf("list script = %q", got)
+	}
 	if got := providedEnvMkdirScript(); got != "sudo sh -c 'umask 077; mkdir -p /run/lerd/env'" {
 		t.Errorf("mkdir script = %q", got)
 	}
