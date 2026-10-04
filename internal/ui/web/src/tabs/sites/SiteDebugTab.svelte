@@ -7,6 +7,7 @@
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
   import RequestsLens from '$components/RequestsLens.svelte';
+  import PackageSuggestions from '$components/PackageSuggestions.svelte';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
@@ -75,7 +76,10 @@
       {#if $debugLens === 'browser'}
         <BrowserLens siteScope={siteName} />
       {:else if $debugLens === 'requests'}
-        <RequestsLens siteScope={siteName} />
+        <div class="flex flex-col h-full">
+          {#if domain && !branch}<PackageSuggestions {domain} />{/if}
+          <div class="flex-1 min-h-0"><RequestsLens siteScope={siteName} /></div>
+        </div>
       {:else if $debugLens === 'dumps'}
         <DumpsTab siteScope={siteName} />
       {:else if $debugLens === 'queries'}
