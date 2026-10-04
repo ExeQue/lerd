@@ -56,6 +56,7 @@
     { value: 'console.warn', label: () => 'console.warn', group: m.browser_settings_console },
     { value: 'network', label: m.browser_settings_network, group: m.browser_group_network },
     { value: 'resource', label: m.browser_settings_resources, group: m.browser_group_network },
+    { value: 'request', label: m.requests_layer_request, group: m.browser_group_network },
     { value: 'event', label: m.browser_settings_events, group: m.browser_group_page }
   ];
   const typeOptions = $derived.by(() => {
@@ -80,12 +81,14 @@
   const ROSE = 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300';
   const AMBER = 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300';
   const SKY = 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300';
+  const GREY = 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400';
 
   function badge(d: Record<string, any>): { text: string; tone: string } {
     if (d.type === 'console') return { text: `console.${d.level}`, tone: d.level === 'warn' ? AMBER : ROSE };
     if (d.type === 'network') return { text: d.status ? String(d.status) : 'failed', tone: !d.status || d.status >= 500 ? ROSE : AMBER };
     if (d.type === 'resource') return { text: `<${d.tag}>`, tone: AMBER };
     if (d.type === 'event') return { text: d.name, tone: SKY };
+    if (d.type === 'request') return { text: String(d.status), tone: d.status >= 500 ? ROSE : d.status >= 400 ? AMBER : GREY };
     return { text: d.type, tone: ROSE };
   }
 </script>

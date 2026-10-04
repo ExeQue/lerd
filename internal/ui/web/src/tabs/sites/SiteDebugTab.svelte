@@ -6,6 +6,7 @@
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
+  import RequestsLens from '$components/RequestsLens.svelte';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
@@ -36,6 +37,7 @@
 
   type Lens = DebugLens;
   const tabs = $derived<TabItem<Lens>[]>([
+    { id: 'requests', label: m.debug_tab_requests(), count: counts['request'] },
     { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'] },
     { id: 'queries', label: m.debug_tab_queries(), count: counts['query'] },
     { id: 'jobs', label: m.debug_tab_jobs(), count: counts['job'] },
@@ -72,6 +74,8 @@
     <div class="flex-1 min-h-0 overflow-hidden">
       {#if $debugLens === 'browser'}
         <BrowserLens siteScope={siteName} />
+      {:else if $debugLens === 'requests'}
+        <RequestsLens siteScope={siteName} />
       {:else if $debugLens === 'dumps'}
         <DumpsTab siteScope={siteName} />
       {:else if $debugLens === 'queries'}
