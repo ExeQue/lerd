@@ -493,11 +493,11 @@ func browserCaptureConf(siteName, branch string) string {
 		return ""
 	}
 	path := config.BrowserCapturePath
-	location := func(match, path, upstream string) string {
+	location := func(match, path, upstream, body string) string {
 		return fmt.Sprintf(`
     location %[1]s%[2]s {
         access_log off;
-        client_max_body_size 64k;
+        client_max_body_size %[7]s;
         proxy_pass %[3]s%[4]s;
         proxy_http_version 1.1;
         proxy_set_header X-Lerd-Site "%[5]s";
@@ -505,7 +505,7 @@ func browserCaptureConf(siteName, branch string) string {
         proxy_set_header X-Lerd-Host $host;
         proxy_set_header X-Lerd-Client $remote_addr;
     }
-`, match, path, lerdUIUpstream(), upstream, siteName, branch)
+`, match, path, lerdUIUpstream(), upstream, siteName, branch, body)
 	}
 	// Each script tag carries the id of the request that served the page, and
 	// responses expose it to a page on another origin, so the browser's events
@@ -514,11 +514,11 @@ func browserCaptureConf(siteName, branch string) string {
 	var tags, locations string
 	if capture {
 		tags += fmt.Sprintf(`<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script>`, path)
-		locations += location("= ", path, path) + location("= ", path+".js", path+".js")
+		locations += location("= ", path, path, "64k") + location("= ", path+".js", path+".js", "64k")
 	}
 	if bar {
 		tags += fmt.Sprintf(`<script src="%s/bar/bar.js" data-rid="$upstream_http_x_lerd_rid" async></script>`, path)
-		locations += location("^~ ", path+"/bar/", "/_lerd/bar/")
+		locations += location("^~ ", path+"/bar/", "/_lerd/bar/", "64k")
 	}
 	return fmt.Sprintf(`
     sub_filter '</head>' '%s</head>';
