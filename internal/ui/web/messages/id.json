@@ -1786,5 +1786,6 @@
   "http_received": "Diterima",
   "http_sentSize": "Dikirim",
   "http_status": "Status",
-  "http_failed": "koneksi gagal"
+  "http_failed": "koneksi gagal",
+  "requests_routeParams": "Parameter rute"
 }

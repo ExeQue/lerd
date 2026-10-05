@@ -1786,5 +1786,6 @@
   "http_received": "Primit",
   "http_sentSize": "Trimis",
   "http_status": "Stare",
-  "http_failed": "conexiune eșuată"
+  "http_failed": "conexiune eșuată",
+  "requests_routeParams": "Parametrii rutei"
 }

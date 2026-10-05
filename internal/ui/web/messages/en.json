@@ -1786,5 +1786,6 @@
   "http_received": "Received",
   "http_sentSize": "Sent",
   "http_status": "Status",
-  "http_failed": "connection failed"
+  "http_failed": "connection failed",
+  "requests_routeParams": "Route parameters"
 }
