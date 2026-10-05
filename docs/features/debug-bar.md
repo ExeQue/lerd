@@ -5,6 +5,7 @@ The debug bar puts the Debug window's view of a request on the page itself. It s
 The bar is **off by default** and switched on per site:
 
 - `lerd debugbar on` (and `off`, `status`) in the project's folder
+- `diag` with `action: "debugbar_toggle"` over MCP, with `site` and `enable`, or without `enable` to ask whether it is on
 - the **Debug bar** toggle in the toolbar of the site's Requests lens, on its Debug tab
 
 The choice is kept in lerd's site registry, never in `.lerd.yaml`: showing the bar is one developer's choice, not the team's. Like browser capture, the bar shows only while debug capture is on.
