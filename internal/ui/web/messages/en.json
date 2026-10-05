@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Debug bar",
   "debugbar_site_title": "Show the debug bar on this site's pages",
   "debugbar_waiting": "Waiting for this page's requests",
-  "debugbar_loading": "Loading request…"
+  "debugbar_loading": "Loading request…",
+  "requests_showMore": "Show {count} more of {total} remaining",
+  "requests_nPlusOneShow": "Show queries"
 }

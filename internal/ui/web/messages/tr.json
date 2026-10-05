@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Hata ayıklama çubuğu",
   "debugbar_site_title": "Bu sitenin sayfalarında çubuğu göster",
   "debugbar_waiting": "Bu sayfanın istekleri bekleniyor",
-  "debugbar_loading": "İstek yükleniyor…"
+  "debugbar_loading": "İstek yükleniyor…",
+  "requests_showMore": "Kalan {total} içinden {count} tane daha göster",
+  "requests_nPlusOneShow": "Sorguları göster"
 }

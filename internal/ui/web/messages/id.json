@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Bilah debug",
   "debugbar_site_title": "Tampilkan bilah debug di halaman situs ini",
   "debugbar_waiting": "Menunggu permintaan halaman ini",
-  "debugbar_loading": "Memuat permintaan…"
+  "debugbar_loading": "Memuat permintaan…",
+  "requests_showMore": "Tampilkan {count} lagi dari {total} tersisa",
+  "requests_nPlusOneShow": "Tampilkan kueri"
 }

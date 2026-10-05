@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "デバッグバー",
   "debugbar_site_title": "このサイトのページにデバッグバーを表示",
   "debugbar_waiting": "このページのリクエストを待っています",
-  "debugbar_loading": "リクエストを読み込み中…"
+  "debugbar_loading": "リクエストを読み込み中…",
+  "requests_showMore": "残り {total} 件のうち {count} 件を表示",
+  "requests_nPlusOneShow": "クエリを表示"
 }

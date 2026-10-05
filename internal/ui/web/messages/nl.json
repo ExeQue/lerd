@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Debugbalk",
   "debugbar_site_title": "Toon de debugbalk op de pagina's van deze site",
   "debugbar_waiting": "Wachten op de verzoeken van deze pagina",
-  "debugbar_loading": "Verzoek laden…"
+  "debugbar_loading": "Verzoek laden…",
+  "requests_showMore": "Toon {count} meer van {total} resterend",
+  "requests_nPlusOneShow": "Toon queries"
 }

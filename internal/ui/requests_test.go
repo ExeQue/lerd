@@ -2,6 +2,8 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,5 +101,21 @@ func TestRequestDetail_NamesAChildByItsGraphQLOperation(t *testing.T) {
 	d, ok := requestDetail(events, "page1")
 	if !ok || len(d.Children) != 1 || d.Children[0].Operation != "query Cart" {
 		t.Fatalf("children = %+v", d.Children)
+	}
+}
+
+// Each N+1 finding names the queries it repeats, and only those.
+func TestRequestDetail_NamesTheQueriesAnNPlusOneRepeats(t *testing.T) {
+	var events []dumps.Event
+	for i := 0; i < nPlusOneThreshold; i++ {
+		events = append(events, ev(fmt.Sprintf("q%d", i), "2026-10-04T10:00:01.000Z", dumps.KindQuery, "r1", "shop", "fpm", map[string]any{"sql": fmt.Sprintf("select * from users where id = %d", i)}))
+	}
+	events = append(events, ev("once", "2026-10-04T10:00:01.000Z", dumps.KindQuery, "r1", "shop", "fpm", map[string]any{"sql": "select * from sessions"}))
+	d, ok := requestDetail(events, "r1")
+	if !ok || d.Queries == nil || len(d.Queries.NPlusOne) != 1 {
+		t.Fatalf("findings %+v", d.Queries)
+	}
+	if ids := d.Queries.NPlusOne[0].IDs; len(ids) != nPlusOneThreshold || slices.Contains(ids, "once") {
+		t.Errorf("ids %v", ids)
 	}
 }

@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Barra de depuração",
   "debugbar_site_title": "Mostrar a barra nas páginas deste site",
   "debugbar_waiting": "À espera dos pedidos desta página",
-  "debugbar_loading": "A carregar o pedido…"
+  "debugbar_loading": "A carregar o pedido…",
+  "requests_showMore": "Mostrar mais {count} de {total} restantes",
+  "requests_nPlusOneShow": "Mostrar consultas"
 }

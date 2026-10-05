@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Bara de depanare",
   "debugbar_site_title": "Arată bara pe paginile acestui site",
   "debugbar_waiting": "Se așteaptă cererile acestei pagini",
-  "debugbar_loading": "Se încarcă cererea…"
+  "debugbar_loading": "Se încarcă cererea…",
+  "requests_showMore": "Arată încă {count} din {total} rămase",
+  "requests_nPlusOneShow": "Arată interogările"
 }

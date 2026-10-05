@@ -1841,5 +1841,7 @@
   "debugbar_site_label": "Barre de débogage",
   "debugbar_site_title": "Afficher la barre sur les pages de ce site",
   "debugbar_waiting": "En attente des requêtes de cette page",
-  "debugbar_loading": "Chargement de la requête…"
+  "debugbar_loading": "Chargement de la requête…",
+  "requests_showMore": "Afficher {count} de plus sur {total} restants",
+  "requests_nPlusOneShow": "Afficher les requêtes"
 }
