@@ -79,6 +79,12 @@ Bindings are captured whether they are passed to `execute([...])` or bound one b
 
 Every template rendered, with its file and the data keys it was given. Each value is labelled by what it holds (`user User`, `page array(4)`, `title "Dashboard"`) rather than shipped whole, since a view's data often holds the logged-in user. Blade's own compiled components are left out.
 
+### GraphQL
+
+A request to a GraphQL endpoint, whatever server answers it, gets a GraphQL tab next to Request and a GraphQL icon in the list. Each operation shows its type and name, the query, the variables, and for each root field it called the arguments, the response it got and any errors. Where a framework definition hands over the server's schema, each field is named by the type it returns, both open in the editor, and the schema is browsable up to eight levels deep. Arguments, variables and the response are masked like the request body; see [the limit on secrets written into the query itself](#masking-values).
+
+![A GraphQL request batching a query and a mutation: each root field with the type it returns, its schema unfolded, the input and the response, and the mutation's password masked](/assets/screenshots/request-graphql.png)
+
 ### Mail and messages
 
 - **Mail:** subject, recipients and an HTML preview, captured before it is sent.
