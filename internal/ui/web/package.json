@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run i18n && vite",
-    "build": "npm run i18n && vite build",
+    "build": "npm run i18n && vite build && vite build --config vite.debugbar.config.ts",
     "build:demo": "npm run i18n && vite build --config vite.demo.config.ts",
     "preview": "vite preview",
     "check": "npm run i18n && svelte-check --tsconfig ./tsconfig.json",

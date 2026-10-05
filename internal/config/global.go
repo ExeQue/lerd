@@ -350,6 +350,9 @@ type GlobalConfig struct {
 		// Toggled via `lerd profile on/off` and the dashboard Profiler view.
 		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
 	} `yaml:"profiler,omitempty" mapstructure:"profiler"`
+	// Debugbar is how the debug bar looks on the sites that show it; which
+	// sites do is a per-site setting. See DebugbarSettings.
+	Debugbar      Debugbar `yaml:"debugbar,omitempty" mapstructure:"debugbar"`
 	Notifications struct {
 		// Disabled globally mutes the notifier (WebSocket banners + Web
 		// Push fanout). Inverted form so the zero value keeps existing
