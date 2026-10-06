@@ -674,3 +674,11 @@ func TestSkillDescription_mentionsWorktrees(t *testing.T) {
 		t.Error("skill description should name worktrees so worktree requests load the skill")
 	}
 }
+
+func TestSkillDescription_mentionsBrowserErrors(t *testing.T) {
+	for name, d := range map[string]string{"skill": skillDescription, "cursor": cursorDescription} {
+		if !strings.Contains(d, "JavaScript errors") || !strings.Contains(d, "console warnings") {
+			t.Errorf("%s description should name JavaScript errors and console warnings so a broken page loads the skill", name)
+		}
+	}
+}
