@@ -25,7 +25,7 @@ function load(cfg: Record<string, unknown>): Report[] {
       return true;
     }
   });
-  const full = { console: [], network: [], navigation: true, verbose: false, endpoint, ...cfg };
+  const full = { console: [], network: [], navigation: true, endpoint, ...cfg };
   new Function(script.replace('__LERD_CONFIG__', JSON.stringify(full)))();
   return sent;
 }
@@ -36,7 +36,7 @@ function settle() {
 
 describe('browser capture script', () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     history.replaceState(null, '', '/');
     vi.spyOn(console, 'info').mockImplementation(() => {});
   });
@@ -116,6 +116,37 @@ describe('browser capture script', () => {
     document.dispatchEvent(new CustomEvent('inertia:invalid', { detail: { response: { status: 500 } } }));
     settle();
     expect(sent.map((r) => [r.type, r.message])).toEqual([['event', 'Inertia invalid response: 500']]);
+  });
+
+  // A loop that throws every frame is held back, but the same error caused
+  // again by the user a moment later is reported each time.
+  it('drops an identical repeat only within a second of the last one', () => {
+    const sent = load({ navigation: false, events: [{ event: 'app:fail', label: 'App failed', message: '' }] });
+    const fire = () => document.dispatchEvent(new CustomEvent('app:fail'));
+    fire();
+    fire();
+    settle();
+    expect(sent).toHaveLength(1);
+    vi.advanceTimersByTime(1000);
+    fire();
+    settle();
+    expect(sent).toHaveLength(2);
+  });
+
+  // Inertia hands its events an axios response, a plain object, so it is told
+  // apart by shape: the status and the URL it was asked for, nothing else.
+  it('describes an axios response by its status, method and URL', () => {
+    const sent = load({ navigation: false, events: [{ event: 'inertia:invalid', label: 'Inertia invalid response', message: 'detail.response' }] });
+    const response = {
+      status: 500,
+      data: '<h1>Plain server error</h1>',
+      headers: { 'content-type': 'text/html' },
+      config: { method: 'get', url: '/lerd-test/broken' },
+      request: { responseURL: 'https://shop.test/lerd-test/broken' }
+    };
+    document.dispatchEvent(new CustomEvent('inertia:invalid', { detail: { response } }));
+    settle();
+    expect(sent.map((r) => r.message)).toEqual(['Inertia invalid response: 500 GET https://shop.test/lerd-test/broken']);
   });
 
   it('describes an object at the message path by what identifies its parts', () => {

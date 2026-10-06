@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -113,5 +113,19 @@ describe('browser type filter', () => {
     expect(ids('console.warn')).toEqual(['c']);
     expect(ids('error')).toEqual(['d']);
     expect(ids('navigation')).toEqual(['a']);
+  });
+});
+
+describe('browser page views', () => {
+  const browser = (id: string, type: string): DumpEvent =>
+    ({ v: 1, id, ts: '2026-07-21T10:00:00.000Z', kind: 'browser', ctx: { type: 'browser', site: 'acme', rid: 'p1' }, src: {}, data: { type, message: id } }) as unknown as DumpEvent;
+
+  it('counts what happened on a page, not the page loads', () => {
+    expect(countKinds([browser('load', 'navigation'), browser('boom', 'error')], 'acme')['browser']).toBe(1);
+  });
+
+  it('recognises a page view', () => {
+    expect(isPageView(browser('load', 'navigation'))).toBe(true);
+    expect(isPageView(browser('boom', 'error'))).toBe(false);
   });
 });

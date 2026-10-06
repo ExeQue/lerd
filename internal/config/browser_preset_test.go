@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -122,29 +123,39 @@ func TestPackageSlug_NamesComposerAndNPMFilesApart(t *testing.T) {
 	}
 }
 
-func TestWithBrowserPreset_AddsOnceAndRemovesOnlyItsEvents(t *testing.T) {
-	p := BrowserPreset{Name: "inertia", Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "store"}}}
-	own := BrowserCaptureEvent{Event: "my:error"}
-	s := BrowserCaptureSettings{Events: []BrowserCaptureEvent{own, {Event: "inertia:invalid", Label: "mine"}}}
-
-	added := WithBrowserPreset(s, p, true, nil)
-	if len(added.Events) != 2 || added.Events[1].Label != "mine" || !p.Applied(added) || p.Applied(s) {
-		t.Fatalf("add = %+v", added.Events)
-	}
-	removed := WithBrowserPreset(added, p, false, nil)
-	if len(removed.Events) != 1 || removed.Events[0] != own || p.Applied(removed) {
-		t.Fatalf("remove = %+v", removed.Events)
+// A detected preset is on until the site switches it off; any other preset
+// is off until the site switches it on.
+func TestBrowserPreset_ActiveIsDetectedUnlessOverridden(t *testing.T) {
+	p := BrowserPreset{Name: "inertia"}
+	for _, tc := range []struct {
+		name     string
+		presets  map[string]bool
+		detected bool
+		want     bool
+	}{
+		{"detected, no override", nil, true, true},
+		{"not detected, no override", nil, false, false},
+		{"detected, switched off", map[string]bool{"inertia": false}, true, false},
+		{"not detected, switched on", map[string]bool{"inertia": true}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := p.Active(BrowserCaptureSettings{Presets: tc.presets}, tc.detected); got != tc.want {
+				t.Fatalf("Active = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
-func TestWithBrowserPreset_RemovingKeepsAnEventAnotherAddedPresetDeclares(t *testing.T) {
-	shared := BrowserCaptureEvent{Event: "app:error"}
-	a := BrowserPreset{Name: "a", Events: []BrowserCaptureEvent{shared, {Event: "a:only"}}}
-	b := BrowserPreset{Name: "b", Events: []BrowserCaptureEvent{shared}}
-	s := WithBrowserPreset(WithBrowserPreset(BrowserCaptureSettings{}, a, true, nil), b, true, nil)
-	s = WithBrowserPreset(s, a, false, []BrowserPreset{a, b})
-	if len(s.Events) != 1 || s.Events[0] != shared || a.Applied(s) || !b.Applied(s) {
-		t.Fatalf("after removing a: %+v", s)
+// The script reports the site's own events plus every active preset's, once
+// each, with the site's own wording kept when both name the same event.
+func TestPageEvents_SiteEventsThenActivePresets(t *testing.T) {
+	inertia := BrowserPreset{Name: "inertia", Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "store"}, {Event: "inertia:exception"}}}
+	turbo := BrowserPreset{Name: "turbo", Events: []BrowserCaptureEvent{{Event: "turbo:frame-missing"}}}
+	s := BrowserCaptureSettings{Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "mine"}}}
+	got := PageEvents(s, []BrowserPreset{inertia, turbo}, func(p BrowserPreset) bool { return p.Name == "inertia" })
+	want := []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "mine"}, {Event: "inertia:exception"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("PageEvents = %+v, want %+v", got, want)
 	}
 }
 

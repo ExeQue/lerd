@@ -4,14 +4,13 @@
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
-  import { browserCaptureEnabled, loadBrowserCaptureStatus, setBrowserCapture } from '$stores/browserCapture';
-  import { buildKindGroups, knownDebugSites, debugEvents, facetOf } from '$stores/debugEvents';
+  import { siteCaptureOn, loadSiteBrowserCapture } from '$stores/browserCapture';
+  import { buildKindGroups, knownDebugSites, debugEvents, facetOf, isPageView } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
-  import BrowserCaptureSettings from '$components/BrowserCaptureSettings.svelte';
-  import Modal from '$components/Modal.svelte';
+  import { openBrowserCaptureModal } from '$stores/modals';
   import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { m } from '../paraglide/messages.js';
 
@@ -23,16 +22,18 @@
   }
   let { siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
+  const siteOff = $derived(scoped && $siteCaptureOn[siteScope] === false);
 
   let localText = $state('');
   let textInput = $state('');
-  let showSettings = $state(false);
   let typeFilter = $state('');
 
   onMount(() => {
     startDumpsStream();
-    void loadBrowserCaptureStatus();
-    if (scoped) textInput = get(debugSearch);
+    if (scoped) {
+      textInput = get(debugSearch);
+      loadSiteBrowserCapture(siteScope).catch(() => {});
+    }
   });
   onDestroy(() => stopDumpsStream());
 
@@ -44,9 +45,10 @@
   });
 
   const effectiveText = $derived(scoped ? $debugSearch : localText);
-  const groups = $derived(buildKindGroups($debugEvents, 'browser', scoped ? siteScope : $queryFilterSite, effectiveText, scoped, '', true, typeFilter));
+  const happened = $derived($debugEvents.filter((ev) => !isPageView(ev)));
+  const groups = $derived(buildKindGroups(happened, 'browser', scoped ? siteScope : $queryFilterSite, effectiveText, scoped, '', true, typeFilter));
   // Only the types that were actually reported, grouped and ordered the way a
-  // reader scans for trouble: errors first, page views last.
+  // reader scans for trouble: errors first, page events last.
   const TYPES: Array<{ value: string; label: () => string; group: () => string }> = [
     { value: 'error', label: m.browser_type_error, group: m.browser_group_errors },
     { value: 'rejection', label: m.browser_type_rejection, group: m.browser_group_errors },
@@ -54,8 +56,7 @@
     { value: 'console.warn', label: () => 'console.warn', group: m.browser_settings_console },
     { value: 'network', label: m.browser_settings_network, group: m.browser_group_network },
     { value: 'resource', label: m.browser_settings_resources, group: m.browser_group_network },
-    { value: 'event', label: m.browser_settings_events, group: m.browser_group_page },
-    { value: 'navigation', label: m.browser_settings_navigation, group: m.browser_group_page }
+    { value: 'event', label: m.browser_settings_events, group: m.browser_group_page }
   ];
   const typeOptions = $derived.by(() => {
     const seen = new Set($debugEvents.filter((ev) => ev.kind === 'browser').map(facetOf));
@@ -69,17 +70,6 @@
     limit = LENS_PAGE;
   });
 
-  let enabling = $state(false);
-  async function onEnable() {
-    if (enabling) return;
-    enabling = true;
-    try {
-      await setBrowserCapture(true);
-    } finally {
-      enabling = false;
-    }
-  }
-
   let expanded = $state<Record<string, boolean>>({});
   const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
   function localTime(ts: string): string {
@@ -89,7 +79,6 @@
 
   const ROSE = 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300';
   const AMBER = 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300';
-  const GREY = 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400';
   const SKY = 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300';
 
   function badge(d: Record<string, any>): { text: string; tone: string } {
@@ -97,7 +86,6 @@
     if (d.type === 'network') return { text: d.status ? String(d.status) : 'failed', tone: !d.status || d.status >= 500 ? ROSE : AMBER };
     if (d.type === 'resource') return { text: `<${d.tag}>`, tone: AMBER };
     if (d.type === 'event') return { text: d.name, tone: SKY };
-    if (d.type === 'navigation') return { text: d.nav, tone: GREY };
     return { text: d.type, tone: ROSE };
   }
 </script>
@@ -128,30 +116,21 @@
       />
     {/if}
     {#if scoped}
-      <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => (showSettings = !showSettings)}>{m.common_settings()}</button>
+      <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserCaptureModal(siteScope)}>{m.common_settings()}</button>
     {/if}
     <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps('browser')}>{m.common_clear()}</button>
   </div>
 
-  {#if scoped}
-    <Modal open={showSettings} title={m.browser_settings_title({ site: siteScope })} size="xl" onclose={() => (showSettings = false)}>
-      <BrowserCaptureSettings site={siteScope} />
-    </Modal>
-  {/if}
-
   <div class="flex-1 overflow-y-auto px-3 pb-3">
     {#if groups.length === 0}
-      {#if !$browserCaptureEnabled}
+      {#if siteOff}
         <div class="px-3 py-10 text-center space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.browser_disabled_title()}</p>
           <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.browser_disabled_body()}</p>
-          <button type="button" disabled={enabling} onclick={onEnable} class="inline-flex items-center gap-1.5 text-xs rounded-sm border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50">
-            {enabling ? m.queries_enabling() : m.browser_enable()}
-          </button>
         </div>
       {:else}
         <EmptyState title={m.debug_waiting_title()}>
-          {#snippet hint()}{m.browser_waiting_body()}{/snippet}
+          {#snippet hint()}{scoped ? m.browser_waiting_body() : m.browser_waiting_global()}{/snippet}
         </EmptyState>
       {/if}
     {:else}

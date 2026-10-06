@@ -67,10 +67,18 @@ export function facetOf(ev: DumpEvent): string {
 
 // countKinds tallies buffered events per wire-kind (optionally scoped to a
 // site), for the per-tab item counters.
+// isPageView marks a browser page load or SPA navigation. It groups the
+// events of one page and tells MCP a page loaded, but the lens header already
+// names the page, so it is not a row or a count of its own.
+export function isPageView(ev: DumpEvent): boolean {
+  return ev.kind === 'browser' && (ev.data as { type?: string } | undefined)?.type === 'navigation';
+}
+
 export function countKinds(events: DumpEvent[], site = ''): Record<string, number> {
   const c: Record<string, number> = {};
   for (const ev of events) {
     if (site && ev.ctx.site !== site) continue;
+    if (isPageView(ev)) continue;
     c[ev.kind] = (c[ev.kind] ?? 0) + 1;
   }
   return c;

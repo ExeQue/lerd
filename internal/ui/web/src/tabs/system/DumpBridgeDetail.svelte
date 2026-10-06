@@ -10,7 +10,6 @@
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
-  import { browserCaptureEnabled, loadBrowserCaptureStatus } from '$stores/browserCapture';
   import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
   import { debugLens, type DebugLens } from '$stores/debugLens';
@@ -74,7 +73,6 @@
   onMount(() => {
     void refreshStatus();
     void refreshDevtoolsStatus();
-    void loadBrowserCaptureStatus();
   });
 </script>
 
@@ -97,7 +95,7 @@
 <DetailPanel>
   <DetailHeader title={m.debug_title()} trailing={pill} />
 
-  {#if !$debugCaptureEnabled && !$browserCaptureEnabled}
+  {#if !$debugCaptureEnabled}
     <DebugDisabled />
   {:else}
     <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
@@ -105,8 +103,6 @@
     <div class="flex-1 min-h-0 overflow-hidden">
       <BrowserLens />
     </div>
-    {:else if !$debugCaptureEnabled}
-    <DebugDisabled />
     {:else if $debugLens === 'dumps'}
     <div class="px-3 sm:px-5 py-2 space-y-2 shrink-0 text-xs text-gray-500 dark:text-gray-400">
       <p>

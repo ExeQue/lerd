@@ -51,9 +51,9 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 	summary := browsercapture.Summarize(events, types)
 	cfg, _ := config.LoadGlobal()
 	out := map[string]any{
-		"enabled":    cfg != nil && cfg.IsBrowserCaptureEnabled(),
-		"counts":     summary.Counts,
-		"page_views": summary.PageViews,
+		"debug_enabled": cfg != nil && cfg.IsDumpsEnabled(),
+		"counts":        summary.Counts,
+		"page_views":    summary.PageViews,
 	}
 	var site *config.Site
 	if ref := strArg(args, "site"); ref != "" {
@@ -63,7 +63,7 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 			out["site_settings"] = settings
 		}
 	}
-	if hint := browserEventsHint(out["enabled"].(bool), site, len(summary.PageViews), len(types) > 0); hint != "" {
+	if hint := browserEventsHint(out["debug_enabled"].(bool), site, len(summary.PageViews), len(types) > 0); hint != "" {
 		out["hint"] = hint
 	}
 	b, _ := json.Marshal(out)
@@ -72,14 +72,14 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 
 // browserEventsHint explains an empty answer, so no events is never read as a
 // page that threw nothing while capture was not even running.
-func browserEventsHint(enabled bool, site *config.Site, views int, filtered bool) string {
+func browserEventsHint(debug bool, site *config.Site, views int, filtered bool) string {
 	switch {
-	case !enabled:
-		return "Browser capture is off, so nothing is recorded. Turn it on with browser_toggle (enable: true), then load a page of the site."
 	case site != nil && !browsercapture.Capturable(*site):
 		return "This site's pages are not covered by browser capture (FrankenPHP, paused or a sleeping host-proxy site)."
 	case site != nil && !config.BrowserCaptureFor(*site).Enabled:
-		return "Browser capture is off for this site (browser_capture.enabled in its .lerd.yaml or Browser settings)."
+		return "Browser capture is off for this site. Turn it on with browser_toggle (site, enable: true), then load a page of the site."
+	case !debug:
+		return "Debug capture is off, so nothing is recorded. Turn it on with dumps_toggle (enable: true), then load a page of the site."
 	case views == 0 && filtered:
 		return "Nothing of the requested types. Drop types to see every page view and what happened on it."
 	case views == 0:
@@ -88,21 +88,33 @@ func browserEventsHint(enabled bool, site *config.Site, views int, filtered bool
 	return ""
 }
 
+// execBrowserCaptureToggle turns capture on or off for one site, and says
+// when debug capture is off too, since the script needs both.
 func execBrowserCaptureToggle(args map[string]any) (any, *rpcError) {
+	site, err := config.FindSiteByRef(strArg(args, "site"))
+	if err != nil || site == nil {
+		return toolErr(`"site" must name a linked site`), nil
+	}
 	enable, ok := args["enable"].(bool)
 	if !ok {
 		return toolErr(`"enable" is required (true or false)`), nil
 	}
-	res, err := browsercapture.SetEnabled(enable)
+	res, err := browsercapture.SetSite(*site, enable)
 	if err != nil {
 		return toolErr("toggle failed: " + err.Error()), nil
 	}
-	b, _ := json.Marshal(res)
+	cfg, _ := config.LoadGlobal()
+	debug := cfg != nil && cfg.IsDumpsEnabled()
+	out := map[string]any{"site": site.Name, "enabled": res.Enabled, "no_change": res.NoChange, "debug_enabled": debug}
+	if enable && !debug {
+		out["hint"] = "Debug capture is off, so the site's pages get the script once dumps_toggle (enable: true) turns it on."
+	}
+	b, _ := json.Marshal(out)
 	return toolOK(string(b)), nil
 }
 
 // execBrowserPresets lists the store's event presets for a site with what was
-// detected and added, or adds (enable true) or removes the one named by preset.
+// detected and on, or switches the one named by preset on (enable true) or off.
 func execBrowserPresets(args map[string]any) (any, *rpcError) {
 	site, err := config.FindSiteByRef(strArg(args, "site"))
 	if err != nil || site == nil {
@@ -113,7 +125,7 @@ func execBrowserPresets(args map[string]any) (any, *rpcError) {
 		if !ok {
 			return toolErr(`"enable" is required with "preset" (true adds, false removes)`), nil
 		}
-		if err := browsercapture.ApplyPreset(*site, name, add); err != nil {
+		if err := browsercapture.SetPreset(*site, name, add); err != nil {
 			return toolErr(err.Error()), nil
 		}
 		site, _ = config.FindSite(site.Name)

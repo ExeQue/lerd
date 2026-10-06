@@ -2,11 +2,9 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"maps"
 	"regexp"
 	"slices"
-	"strings"
 )
 
 // Browser capture values a site can opt into on top of uncaught errors and
@@ -16,8 +14,8 @@ var (
 	BrowserCaptureNetworkClasses = []string{"4xx", "5xx", "failed"}
 )
 
-// BrowserCapture is a site's browser capture settings as written in
-// .lerd.yaml or the site registry. A nil Enabled or Console keeps the default.
+// BrowserCapture is a site's browser capture settings as kept in lerd's site
+// registry. A nil Enabled or Console keeps the default.
 type BrowserCapture struct {
 	Enabled *bool    `yaml:"enabled,omitempty"`
 	Console []string `yaml:"console"`
@@ -30,14 +28,9 @@ type BrowserCapture struct {
 	// Events are DOM events the page should report, such as a frontend
 	// library's own error events.
 	Events []BrowserCaptureEvent `yaml:"events,omitempty"`
-	// Presets names the store presets added to the site, so removing one later
-	// takes out what it added and nothing another preset still needs.
-	Presets []string `yaml:"presets,omitempty"`
-	// Verbose has the script log each capture to the page's console too.
-	Verbose bool `yaml:"verbose,omitempty"`
-	// Route is where the site serves the script (Route + ".js") and receives
-	// reports, for an app that uses /_lerd itself. Empty keeps the default.
-	Route string `yaml:"route,omitempty"`
+	// Presets switches store presets on or off for the site. A preset it does
+	// not name is on when the project uses its library, and off otherwise.
+	Presets map[string]bool `yaml:"presets,omitempty"`
 }
 
 // BrowserCaptureEvent is one DOM event to report. Message is a dot path into
@@ -60,10 +53,9 @@ func (e BrowserCaptureEvent) valid() bool {
 		(e.Message == "" || browserCapturePathRE.MatchString(e.Message))
 }
 
-// DefaultBrowserCaptureRoute is the route a site uses unless it sets its own.
-const DefaultBrowserCaptureRoute = "/_lerd/browser"
-
-var browserCaptureRouteRE = regexp.MustCompile(`^(/[A-Za-z0-9._-]+)+$`)
+// BrowserCapturePath is where a site's pages load the script (plus ".js") and
+// post their reports; nginx hands both to lerd-ui.
+const BrowserCapturePath = "/_lerd/browser"
 
 // BrowserCaptureSettings is the resolved form the capture script and the
 // dashboard work with.
@@ -74,24 +66,22 @@ type BrowserCaptureSettings struct {
 	Navigation bool                  `json:"navigation"`
 	Resources  bool                  `json:"resources"`
 	Events     []BrowserCaptureEvent `json:"events"`
-	Presets    []string              `json:"presets"`
-	Verbose    bool                  `json:"verbose"`
-	Route      string                `json:"route"`
+	Presets    map[string]bool       `json:"presets"`
 }
 
-// Resolve fills in the defaults: enabled, console errors, no network failures.
+// Resolve fills in the defaults: off until the site opts in, console errors
+// and warnings (Vue and Alpine warn through console.warn), no network failures.
 func (b *BrowserCapture) Resolve() BrowserCaptureSettings {
-	out := BrowserCaptureSettings{Enabled: true, Console: []string{"error"}, Network: []string{}, Navigation: true, Events: []BrowserCaptureEvent{}, Presets: []string{}, Route: DefaultBrowserCaptureRoute}
+	out := BrowserCaptureSettings{Console: []string{"error", "warn"}, Network: []string{}, Navigation: true, Events: []BrowserCaptureEvent{}, Presets: map[string]bool{}}
 	if b == nil {
 		return out
 	}
 	if b.Enabled != nil {
 		out.Enabled = *b.Enabled
 	}
-	out.Verbose = b.Verbose
 	out.Resources = b.Resources
 	if b.Presets != nil {
-		out.Presets = slices.Clone(b.Presets)
+		out.Presets = maps.Clone(b.Presets)
 	}
 	for _, e := range b.Events {
 		if e.valid() {
@@ -100,9 +90,6 @@ func (b *BrowserCapture) Resolve() BrowserCaptureSettings {
 	}
 	if b.Navigation != nil {
 		out.Navigation = *b.Navigation
-	}
-	if validBrowserCaptureRoute(b.Route) {
-		out.Route = b.Route
 	}
 	if b.Console != nil {
 		out.Console = known(b.Console, BrowserCaptureConsoleLevels)
@@ -124,7 +111,7 @@ func (b *BrowserCapture) clone() *BrowserCapture {
 		cp.Navigation = &v
 	}
 	cp.Events = slices.Clone(b.Events)
-	cp.Presets = slices.Clone(b.Presets)
+	cp.Presets = maps.Clone(b.Presets)
 	cp.Console = slices.Clone(b.Console)
 	cp.Network = slices.Clone(b.Network)
 	return &cp
@@ -140,21 +127,12 @@ func known(values, allowed []string) []string {
 	return out
 }
 
-// validBrowserCaptureRoute accepts an absolute path of plain segments, which is
-// safe to splice into an nginx location and a script tag.
-func validBrowserCaptureRoute(r string) bool {
-	return browserCaptureRouteRE.MatchString(r) && !strings.Contains(r, "..")
-}
-
 // Validate refuses a value lerd does not know, naming it.
 func (s BrowserCaptureSettings) Validate() error {
 	for _, e := range s.Events {
 		if !e.valid() {
 			return fmt.Errorf("invalid event %q (want a DOM event name and an optional dot path such as detail.response.status)", e.Event)
 		}
-	}
-	if s.Route != "" && !validBrowserCaptureRoute(s.Route) {
-		return fmt.Errorf("invalid route %q (want an absolute path such as %s)", s.Route, DefaultBrowserCaptureRoute)
 	}
 	for _, v := range s.Console {
 		if !slices.Contains(BrowserCaptureConsoleLevels, v) {
@@ -169,24 +147,14 @@ func (s BrowserCaptureSettings) Validate() error {
 	return nil
 }
 
-// BrowserCaptureFor returns the site's settings: .lerd.yaml's when it sets
-// them, else the registry's, else the defaults.
+// BrowserCaptureFor returns the site's settings from lerd's site registry, or
+// the defaults. They never live in the project: turning capture on is one
+// developer's choice, like the debug switch it works under.
 func BrowserCaptureFor(site Site) BrowserCaptureSettings {
-	if proj, err := LoadProjectConfig(site.Path); err == nil && proj.BrowserCapture != nil {
-		return proj.BrowserCapture.Resolve()
-	}
 	return site.BrowserCapture.Resolve()
 }
 
-// BrowserCaptureInProjectFile reports whether the site's settings are kept in
-// its .lerd.yaml, which is the case whenever the project has one.
-func BrowserCaptureInProjectFile(site Site) bool {
-	_, err := os.Stat(filepath.Join(site.Path, ".lerd.yaml"))
-	return err == nil
-}
-
-// SaveBrowserCapture stores the site's settings in .lerd.yaml when the project
-// has one, and in the site registry otherwise, so no .lerd.yaml is created.
+// SaveBrowserCapture stores the site's settings in lerd's site registry.
 func SaveBrowserCapture(site Site, s BrowserCaptureSettings) error {
 	if err := s.Validate(); err != nil {
 		return err
@@ -197,21 +165,9 @@ func SaveBrowserCapture(site Site, s BrowserCaptureSettings) error {
 		Navigation: &navigation,
 		Console:    append([]string{}, s.Console...),
 		Network:    append([]string{}, s.Network...),
-		Verbose:    s.Verbose,
 		Resources:  s.Resources,
 		Events:     slices.Clone(s.Events),
-		Presets:    slices.Clone(s.Presets),
-	}
-	if s.Route != DefaultBrowserCaptureRoute {
-		bc.Route = s.Route
-	}
-	if BrowserCaptureInProjectFile(site) {
-		proj, err := LoadProjectConfig(site.Path)
-		if err != nil {
-			return err
-		}
-		proj.BrowserCapture = bc
-		return SaveProjectConfig(site.Path, proj)
+		Presets:    maps.Clone(s.Presets),
 	}
 	siteWriteMu.Lock()
 	defer siteWriteMu.Unlock()

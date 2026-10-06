@@ -6,7 +6,6 @@
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
-  import { browserCaptureEnabled, loadBrowserCaptureStatus } from '$stores/browserCapture';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
@@ -16,7 +15,6 @@
   onMount(() => {
     void refreshStatus();
     void refreshDevtoolsStatus();
-    void loadBrowserCaptureStatus();
   });
 
   interface Props {
@@ -62,21 +60,18 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  {#if !phpLenses}
+  {#if !$debugCaptureEnabled}
+    <DebugDisabled />
+  {:else if !phpLenses}
     <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle />
     <div class="flex-1 min-h-0 overflow-hidden">
       <BrowserLens siteScope={siteName} />
     </div>
-  {:else if !$debugCaptureEnabled && !$browserCaptureEnabled}
-    <DebugDisabled />
   {:else}
     <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
     <div class="flex-1 min-h-0 overflow-hidden">
-      <!-- Browser capture has its own switch, so its lens shows while debug capture is off. -->
       {#if $debugLens === 'browser'}
         <BrowserLens siteScope={siteName} />
-      {:else if !$debugCaptureEnabled}
-        <DebugDisabled />
       {:else if $debugLens === 'dumps'}
         <DumpsTab siteScope={siteName} />
       {:else if $debugLens === 'queries'}

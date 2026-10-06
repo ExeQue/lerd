@@ -478,33 +478,38 @@ func profilerEnabled() bool {
 // browserCaptureConf renders a site's browser capture block for its vhost:
 // the script injection before </head> and the two locations that hand the
 // script and the reports to lerd-ui, naming the site in headers nginx sets
-// itself. Empty when the global toggle is off.
+// itself. Empty unless debug capture is on and the site opted in.
 func browserCaptureConf(siteName, branch string) string {
 	cfg, err := config.LoadGlobal()
-	if err != nil || !cfg.IsBrowserCaptureEnabled() {
+	if err != nil || !cfg.IsDumpsEnabled() {
 		return ""
 	}
-	route := config.DefaultBrowserCaptureRoute
-	if site, err := config.FindSite(siteName); err == nil && site != nil {
-		route = config.BrowserCaptureFor(*site).Route
+	site, err := config.FindSite(siteName)
+	if err != nil || site == nil {
+		return ""
 	}
+	settings := config.BrowserCaptureFor(*site)
+	if !settings.Enabled {
+		return ""
+	}
+	path := config.BrowserCapturePath
 	location := func(suffix string) string {
 		return fmt.Sprintf(`
     location = %[1]s%[2]s {
         access_log off;
         client_max_body_size 64k;
-        proxy_pass %[3]s/_lerd/browser%[2]s;
+        proxy_pass %[3]s%[1]s%[2]s;
         proxy_http_version 1.1;
         proxy_set_header X-Lerd-Site "%[4]s";
         proxy_set_header X-Lerd-Branch "%[5]s";
         proxy_set_header X-Lerd-Host $host;
     }
-`, route, suffix, lerdUIUpstream(), siteName, branch)
+`, path, suffix, lerdUIUpstream(), siteName, branch)
 	}
 	return fmt.Sprintf(`
     sub_filter '</head>' '<script src="%s.js"></script></head>';
     sub_filter_once on;
-`, route) + location("") + location(".js")
+`, path) + location("") + location(".js")
 }
 
 // resolvePublicDir returns the document root subdirectory for a site, resolved

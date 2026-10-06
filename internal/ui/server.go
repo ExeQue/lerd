@@ -316,8 +316,6 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/captures", withCORS(handleProfilerCaptures))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
-	mux.HandleFunc("/api/browser-capture/status", withCORS(handleBrowserCaptureStatus))
-	mux.HandleFunc("/api/browser-capture/toggle", withCORS(handleBrowserCaptureToggle))
 	mux.HandleFunc("/api/browser-capture/sites/", withCORS(handleBrowserCaptureSite))
 	mux.HandleFunc("/api/browser-capture/presets", withCORS(handleBrowserCapturePresets))
 	mux.HandleFunc("/_spx/", handleSpxProxy)

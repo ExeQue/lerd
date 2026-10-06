@@ -17,25 +17,26 @@ func NewBrowserCaptureCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "browser-capture",
 		Short: "Capture JavaScript errors from your sites' pages",
-		Long: `Turn browser capture on or off. While it is on, nginx injects a small script
-into the HTML of every PHP-FPM, host-proxy and custom-container site that reports uncaught errors, unhandled promise
-rejections and, per site, console messages and failed requests to the
-dashboard's Debug view and the MCP diag tool. Per-site settings live under
-browser_capture in .lerd.yaml.`,
+		Long: `Turn browser capture on or off for a site, the one in this directory unless
+one is named. While debug capture is on (lerd dump on), nginx injects a small
+script into the HTML of every site that opted in, which reports uncaught errors,
+unhandled promise rejections and, per site, console messages and failed
+requests to the dashboard's Debug view and the MCP diag tool. Settings are
+kept in lerd's site registry, never in the project.`,
 	}
 	toggle := func(on bool) func(*cobra.Command, []string) error {
-		return func(_ *cobra.Command, _ []string) error { return runBrowserCaptureToggle(on) }
+		return func(_ *cobra.Command, args []string) error { return runBrowserCaptureToggle(args, on) }
 	}
-	cmd.AddCommand(&cobra.Command{Use: "on", Short: "Turn browser capture on", Args: cobra.NoArgs, RunE: toggle(true)})
-	cmd.AddCommand(&cobra.Command{Use: "off", Short: "Turn browser capture off", Args: cobra.NoArgs, RunE: toggle(false)})
-	cmd.AddCommand(&cobra.Command{Use: "status", Short: "Show whether browser capture is on", Args: cobra.NoArgs, RunE: runBrowserCaptureStatus})
+	cmd.AddCommand(&cobra.Command{Use: "on [site]", Short: "Turn browser capture on for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(true)})
+	cmd.AddCommand(&cobra.Command{Use: "off [site]", Short: "Turn browser capture off for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(false)})
+	cmd.AddCommand(&cobra.Command{Use: "status", Short: "Show whether browser capture is on for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserCaptureStatus})
 	cmd.AddCommand(&cobra.Command{Use: "presets", Short: "List the store's event presets for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserCapturePresets})
-	preset := &cobra.Command{Use: "preset", Short: "Add or remove an event preset for the site in this directory"}
+	preset := &cobra.Command{Use: "preset", Short: "Switch an event preset on or off for the site in this directory"}
 	apply := func(add bool) func(*cobra.Command, []string) error {
 		return func(_ *cobra.Command, args []string) error { return runBrowserCapturePreset(args[0], add) }
 	}
-	preset.AddCommand(&cobra.Command{Use: "add <preset>", Short: "Add a preset's events", Args: cobra.ExactArgs(1), RunE: apply(true)})
-	preset.AddCommand(&cobra.Command{Use: "remove <preset>", Short: "Remove a preset's events", Args: cobra.ExactArgs(1), RunE: apply(false)})
+	preset.AddCommand(&cobra.Command{Use: "on <preset>", Short: "Report a preset's events", Args: cobra.ExactArgs(1), RunE: apply(true)})
+	preset.AddCommand(&cobra.Command{Use: "off <preset>", Short: "Stop reporting a preset's events", Args: cobra.ExactArgs(1), RunE: apply(false)})
 	cmd.AddCommand(preset)
 	return cmd
 }
@@ -64,8 +65,8 @@ func runBrowserCapturePresets(_ *cobra.Command, _ []string) error {
 		if p.Detected {
 			tags = append(tags, feedback.Green("detected"))
 		}
-		if p.Applied {
-			tags = append(tags, "added")
+		if p.Active {
+			tags = append(tags, "on")
 		}
 		fmt.Printf("%-10s %-15s %s  %s\n", p.Name, p.Label, strings.Join(p.Contents(), ", "), strings.Join(tags, " "))
 	}
@@ -77,31 +78,50 @@ func runBrowserCapturePreset(name string, add bool) error {
 	if err != nil {
 		return err
 	}
-	if err := browsercapture.ApplyPreset(*site, name, add); err != nil {
+	if err := browsercapture.SetPreset(*site, name, add); err != nil {
 		return err
 	}
 	if add {
-		fmt.Printf("Added the %s events to %s.\n", name, site.Name)
+		fmt.Printf("Preset %s on for %s.\n", name, site.Name)
 	} else {
-		fmt.Printf("Removed the %s events from %s.\n", name, site.Name)
+		fmt.Printf("Preset %s off for %s.\n", name, site.Name)
 	}
 	return nil
 }
 
-func runBrowserCaptureToggle(on bool) error {
-	res, err := browsercapture.SetEnabled(on)
+// siteFromArgs is the site named in args, or the one in this directory.
+func siteFromArgs(args []string) (*config.Site, error) {
+	if len(args) == 0 {
+		return siteInCwd()
+	}
+	site, err := config.FindSiteByRef(args[0])
+	if err != nil || site == nil {
+		return nil, fmt.Errorf("no linked site %q", args[0])
+	}
+	return site, nil
+}
+
+func runBrowserCaptureToggle(args []string, on bool) error {
+	site, err := siteFromArgs(args)
+	if err != nil {
+		return err
+	}
+	res, err := browsercapture.SetSite(*site, on)
 	if err != nil {
 		return err
 	}
 	switch {
 	case res.NoChange && on:
-		fmt.Println("Browser capture already on.")
+		fmt.Printf("Browser capture already on for %s.\n", site.Name)
 	case res.NoChange:
-		fmt.Println("Browser capture already off.")
+		fmt.Printf("Browser capture already off for %s.\n", site.Name)
 	case on:
-		fmt.Println("Browser capture on. JavaScript errors from your sites now show in the Debug view.")
+		fmt.Printf("Browser capture on for %s.\n", site.Name)
 	default:
-		fmt.Println("Browser capture off.")
+		fmt.Printf("Browser capture off for %s.\n", site.Name)
+	}
+	if cfg, err := config.LoadGlobal(); on && err == nil && !cfg.IsDumpsEnabled() {
+		fmt.Println("Debug capture is off, so its pages get the script once you run `lerd dump on`.")
 	}
 	return nil
 }
@@ -112,10 +132,10 @@ func runBrowserCaptureStatus(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	state := feedback.Amber("off")
-	if cfg.IsBrowserCaptureEnabled() {
+	if cfg.IsDumpsEnabled() {
 		state = feedback.Green("on")
 	}
-	fmt.Printf("Browser capture: %s\n", state)
+	fmt.Printf("Debug capture: %s\n", state)
 	site, err := siteInCwd()
 	if err != nil {
 		return nil

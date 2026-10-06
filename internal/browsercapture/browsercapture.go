@@ -1,7 +1,7 @@
 // Package browsercapture reports JavaScript errors from the pages lerd serves
-// into the dashboard. Turning it on injects a script into the HTML of every
-// PHP-FPM, host-proxy and custom-container site through nginx; the script posts what it catches to a same-origin
-// endpoint nginx proxies to lerd-ui, which records it as a browser event.
+// into the dashboard. A site that opts in gets a script injected into its HTML
+// through nginx while debug capture is on; the script posts what it catches to
+// a same-origin endpoint nginx proxies to lerd-ui, which records it.
 package browsercapture
 
 import (
@@ -11,12 +11,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/dashboard"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
@@ -25,16 +27,15 @@ import (
 //go:embed browser.js
 var scriptTemplate string
 
-// The hooks SetEnabled and SaveSite go through, swapped out in tests.
+// The hooks SetSite, SaveSite and RefreshVhosts go through, swapped out in tests.
 var (
-	regenerateVhostsFn    = regenerateVhosts
 	regenerateSiteVhostFn = regenerateSiteVhost
 	nginxReloadFn         = nginx.Reload
 )
 
-// Capturable reports whether a site's vhost carries the capture block: PHP-FPM,
-// host-proxy and custom-container sites. FrankenPHP is left out for now, and a
-// paused site or a sleeping host-proxy one keeps its holding page.
+// Capturable reports whether a site's vhost can carry the capture block:
+// PHP-FPM, host-proxy and custom-container sites. FrankenPHP is left out for
+// now, and a paused site or a sleeping host-proxy one keeps its holding page.
 func Capturable(s config.Site) bool {
 	if s.Ignored || s.Paused || s.IsFrankenPHP() {
 		return false
@@ -51,65 +52,69 @@ func regenerateSiteVhost(s config.Site) error {
 	return siteops.RegenerateSiteVhost(&s, s.PrimaryDomain())
 }
 
-func regenerateVhosts() error {
+// RefreshVhosts rewrites the vhosts of the sites that opted in, after the
+// debug switch flipped, so their pages gain or lose the script. With no site
+// opted in it does nothing, so the debug switch never reloads nginx for it.
+func RefreshVhosts() error {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return err
 	}
+	rewritten := 0
 	for _, s := range reg.Sites {
-		if !Capturable(s) {
+		if !Capturable(s) || !config.BrowserCaptureFor(s).Enabled {
 			continue
 		}
-		if err := regenerateSiteVhost(s); err != nil {
+		if err := regenerateSiteVhostFn(s); err != nil {
 			return err
 		}
+		rewritten++
 	}
-	return nil
+	if rewritten == 0 {
+		return nil
+	}
+	return nginxReloadFn()
 }
 
-// Result reports the outcome of a SetEnabled call.
+// Result reports the outcome of a SetSite call.
 type Result struct {
 	Enabled  bool `json:"enabled"`
 	NoChange bool `json:"no_change"`
 }
 
-// SetEnabled turns browser capture on or off globally. The change rewrites
-// each capturable site's vhost and reloads nginx.
-func SetEnabled(on bool) (Result, error) {
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return Result{}, err
-	}
-	if cfg.IsBrowserCaptureEnabled() == on {
+// SetSite turns browser capture on or off for one site. Its pages carry the
+// script only while debug capture is on as well.
+func SetSite(site config.Site, on bool) (Result, error) {
+	s := config.BrowserCaptureFor(site)
+	if s.Enabled == on {
 		return Result{Enabled: on, NoChange: true}, nil
 	}
-	cfg.BrowserCapture.Enabled = on
-	if err := config.SaveGlobal(cfg); err != nil {
-		return Result{}, fmt.Errorf("saving config: %w", err)
-	}
-	if err := regenerateVhostsFn(); err != nil {
+	s.Enabled = on
+	if err := SaveSite(site, s); err != nil {
 		return Result{}, err
-	}
-	if err := nginxReloadFn(); err != nil {
-		return Result{}, fmt.Errorf("reloading nginx: %w", err)
 	}
 	return Result{Enabled: on}, nil
 }
 
-// SaveSite stores a site's settings. Only a new route touches nginx: the
-// vhost names it, while everything else is read when the script is served.
+// SaveSite stores a site's settings. Only turning the site on or off touches
+// nginx, since the vhost carries that; everything else is read when the
+// script is served.
 func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
-	before := config.BrowserCaptureFor(site).Route
+	before := config.BrowserCaptureFor(site)
 	if err := config.SaveBrowserCapture(site, s); err != nil {
 		return err
 	}
 	cfg, err := config.LoadGlobal()
-	if err != nil || !cfg.IsBrowserCaptureEnabled() || !Capturable(site) {
+	if err != nil || !cfg.IsDumpsEnabled() || !Capturable(site) {
 		return err
 	}
 	updated, err := config.FindSite(site.Name)
-	if err != nil || config.BrowserCaptureFor(*updated).Route == before {
+	if err != nil {
 		return err
+	}
+	after := config.BrowserCaptureFor(*updated)
+	if after.Enabled == before.Enabled {
+		return nil
 	}
 	if err := regenerateSiteVhostFn(*updated); err != nil {
 		return err
@@ -118,15 +123,21 @@ func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
 }
 
 // Script returns the capture script for a site's settings. A site with
-// capture turned off gets a script that only says so, so turning it off for one
-// site needs no nginx reload.
-func Script(s config.BrowserCaptureSettings) string {
+// capture turned off gets a script that only says so, for a page cached from
+// before it was turned off.
+func Script(s config.BrowserCaptureSettings, lensURL string) string {
 	if !s.Enabled {
 		return "console.info('lerd browser capture is off for this site');\n"
 	}
-	cfg, _ := json.Marshal(map[string]any{"console": s.Console, "network": s.Network, "navigation": s.Navigation, "resources": s.Resources, "events": s.Events, "verbose": s.Verbose, "endpoint": s.Route})
+	cfg, _ := json.Marshal(map[string]any{"console": s.Console, "network": s.Network, "navigation": s.Navigation, "resources": s.Resources, "events": s.Events, "endpoint": config.BrowserCapturePath, "lens": lensURL})
 	js := strings.Replace(scriptTemplate, "__LERD_CONFIG__", string(cfg), 1)
 	return js + ignoreListMap(strings.Count(js, "\n"))
+}
+
+// LensURL is the dashboard's Browser lens for a site, which the script names
+// in the line it logs on load.
+func LensURL(site config.Site) string {
+	return dashboard.VhostURL + "/#sites/" + site.PrimaryDomain() + "/dumps/browser"
 }
 
 // ignoreListMap is an inline source map that marks the script as library code,
@@ -210,11 +221,12 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
-// PresetStatus is a store preset as it stands for one site.
+// PresetStatus is a store preset as it stands for one site: whether the
+// project uses its library, and whether its events are reported.
 type PresetStatus struct {
 	config.BrowserPreset
 	Detected bool `json:"detected"`
-	Applied  bool `json:"applied"`
+	Active   bool `json:"active"`
 }
 
 // Presets lists the store presets for a site, the detected ones first and
@@ -223,7 +235,8 @@ func Presets(site config.Site) []PresetStatus {
 	settings := config.BrowserCaptureFor(site)
 	var out []PresetStatus
 	for _, p := range config.BrowserPresets(site.Path) {
-		out = append(out, PresetStatus{BrowserPreset: p, Detected: p.Detected(site.Path), Applied: p.Applied(settings)})
+		detected := p.Detected(site.Path)
+		out = append(out, PresetStatus{BrowserPreset: p, Detected: detected, Active: p.Active(settings, detected)})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Detected != out[j].Detected {
@@ -234,13 +247,27 @@ func Presets(site config.Site) []PresetStatus {
 	return out
 }
 
-// ApplyPreset adds a store preset's events to a site, or removes them.
-func ApplyPreset(site config.Site, name string, add bool) error {
-	p, ok := config.FindBrowserPreset(site.Path, name)
-	if !ok {
+// SetPreset switches a store preset on or off for a site.
+func SetPreset(site config.Site, name string, on bool) error {
+	if _, ok := config.FindBrowserPreset(site.Path, name); !ok {
 		return fmt.Errorf("unknown browser capture preset %q", name)
 	}
-	return SaveSite(site, config.WithBrowserPreset(config.BrowserCaptureFor(site), p, add, config.BrowserPresets(site.Path)))
+	s := config.BrowserCaptureFor(site)
+	s.Presets = maps.Clone(s.Presets)
+	if s.Presets == nil {
+		s.Presets = map[string]bool{}
+	}
+	s.Presets[name] = on
+	return SaveSite(site, s)
+}
+
+// PageSettings are the settings the script is served with: the site's own,
+// with the events of its active presets added.
+func PageSettings(site config.Site) config.BrowserCaptureSettings {
+	s := config.BrowserCaptureFor(site)
+	presets := config.BrowserPresets(site.Path)
+	s.Events = config.PageEvents(s, presets, func(p config.BrowserPreset) bool { return p.Active(s, p.Detected(site.Path)) })
+	return s
 }
 
 // EventTypes are the types a browser event is filtered and counted by, with

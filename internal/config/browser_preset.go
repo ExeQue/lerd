@@ -19,8 +19,7 @@ type PackageBrowser struct {
 
 // BrowserPreset is a set of browser capture events for a frontend library,
 // gathered from the store packages that declare it, with the composer and npm
-// packages that show a project uses it. Applying one copies its events into
-// the site's own settings.
+// packages that show a project uses it.
 type BrowserPreset struct {
 	Name   string `json:"name"`
 	Label  string `json:"label"`
@@ -122,38 +121,29 @@ func (p BrowserPreset) Detected(dir string) bool {
 	return false
 }
 
-// Applied reports whether the preset was added to the settings.
-func (p BrowserPreset) Applied(s BrowserCaptureSettings) bool {
-	return slices.Contains(s.Presets, p.Name)
+// Active reports whether the preset's events are reported for a site: as the
+// site switched it, or, when it did not, whether the project uses the library.
+func (p BrowserPreset) Active(s BrowserCaptureSettings, detected bool) bool {
+	if on, ok := s.Presets[p.Name]; ok {
+		return on
+	}
+	return detected
 }
 
-// WithBrowserPreset returns the settings with the preset's events added, or
-// removed when add is false. Adding leaves an event the site already lists as
-// the site has it. Removing keeps an event another added preset in all also
-// declares.
-func WithBrowserPreset(s BrowserCaptureSettings, p BrowserPreset, add bool, all []BrowserPreset) BrowserCaptureSettings {
-	out := s
-	out.Events = slices.Clone(s.Events)
-	out.Presets = slices.DeleteFunc(slices.Clone(s.Presets), func(n string) bool { return n == p.Name })
-	has := func(list []BrowserCaptureEvent, name string) bool {
-		return slices.ContainsFunc(list, func(e BrowserCaptureEvent) bool { return e.Event == name })
-	}
-	if add {
-		out.Presets = append(out.Presets, p.Name)
+// PageEvents is what the script reports: the site's own events, then those of
+// every active preset it does not list itself.
+func PageEvents(s BrowserCaptureSettings, presets []BrowserPreset, active func(BrowserPreset) bool) []BrowserCaptureEvent {
+	out := slices.Clone(s.Events)
+	for _, p := range presets {
+		if !active(p) {
+			continue
+		}
 		for _, e := range p.Events {
-			if !has(out.Events, e.Event) {
-				out.Events = append(out.Events, e)
+			if !slices.ContainsFunc(out, func(o BrowserCaptureEvent) bool { return o.Event == e.Event }) {
+				out = append(out, e)
 			}
 		}
-		return out
 	}
-	var kept []BrowserCaptureEvent
-	for _, o := range all {
-		if o.Name != p.Name && slices.Contains(out.Presets, o.Name) {
-			kept = append(kept, o.Events...)
-		}
-	}
-	out.Events = slices.DeleteFunc(out.Events, func(e BrowserCaptureEvent) bool { return has(p.Events, e.Event) && !has(kept, e.Event) })
 	return out
 }
 

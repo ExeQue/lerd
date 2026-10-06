@@ -12,8 +12,8 @@ import (
 
 // Paths the site vhosts proxy to lerd-ui while browser capture is on.
 const (
-	browserScriptPath = "/_lerd/browser.js"
-	browserReportPath = "/_lerd/browser"
+	browserScriptPath = config.BrowserCapturePath + ".js"
+	browserReportPath = config.BrowserCapturePath
 )
 
 // withBrowserCapture serves the capture script and endpoint ahead of the
@@ -38,7 +38,7 @@ func withBrowserCapture(next http.Handler) http.Handler {
 		if r.URL.Path == browserScriptPath {
 			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = io.WriteString(w, browsercapture.Script(settings))
+			_, _ = io.WriteString(w, browsercapture.Script(browsercapture.PageSettings(*site), browsercapture.LensURL(*site)))
 			return
 		}
 		if r.Method != http.MethodPost {
@@ -47,7 +47,7 @@ func withBrowserCapture(next http.Handler) http.Handler {
 		}
 		srv := dumpsServer.Load()
 		cfg, _ := config.LoadGlobal()
-		if srv == nil || cfg == nil || !cfg.IsBrowserCaptureEnabled() || !settings.Enabled {
+		if srv == nil || cfg == nil || !cfg.IsDumpsEnabled() || !settings.Enabled {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -66,45 +66,6 @@ func withBrowserCapture(next http.Handler) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-}
-
-// handleBrowserCaptureStatus reports whether browser capture is on.
-func handleBrowserCaptureStatus(w http.ResponseWriter, r *http.Request) {
-	cfg, _ := config.LoadGlobal()
-	writeJSON(w, map[string]bool{"enabled": cfg != nil && cfg.IsBrowserCaptureEnabled()})
-}
-
-// handleBrowserCaptureToggle turns browser capture on or off globally. It
-// rewrites every FPM site's vhost, so it takes host-action authority.
-func handleBrowserCaptureToggle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !hasHostActionAuthority(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	var req struct {
-		Enable bool `json:"enable"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
-		return
-	}
-	res, err := browsercapture.SetEnabled(req.Enable)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, res)
-}
-
-// browserCaptureSiteResponse is a site's settings plus where they are kept,
-// so the dashboard can say whether a change lands in .lerd.yaml.
-type browserCaptureSiteResponse struct {
-	config.BrowserCaptureSettings
-	Source string `json:"source"`
 }
 
 // handleBrowserCaptureSite reads (GET) or replaces (POST) one site's
@@ -146,20 +107,16 @@ func handleBrowserCaptureSite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	source := "registry"
-	if config.BrowserCaptureInProjectFile(*site) {
-		source = "lerd.yaml"
-	}
-	writeJSON(w, browserCaptureSiteResponse{BrowserCaptureSettings: config.BrowserCaptureFor(*site), Source: source})
+	writeJSON(w, config.BrowserCaptureFor(*site))
 }
 
 // handleBrowserCapturePresets lists the store presets for ?site= (GET) or adds
-// or removes one (POST {site, name, add}).
+// switches one on or off (POST {site, name, on}).
 func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Site string `json:"site"`
 		Name string `json:"name"`
-		Add  bool   `json:"add"`
+		On   bool   `json:"on"`
 	}
 	switch r.Method {
 	case http.MethodGet:
@@ -183,7 +140,7 @@ func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPost {
-		if err := browsercapture.ApplyPreset(*site, req.Name, req.Add); err != nil {
+		if err := browsercapture.SetPreset(*site, req.Name, req.On); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

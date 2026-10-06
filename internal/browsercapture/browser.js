@@ -22,18 +22,28 @@
     if (v instanceof Error) return v.stack || (v.name + ': ' + v.message);
     if (typeof v === 'string') return v;
     if (v === undefined) return 'undefined';
-    try { return JSON.stringify(simplify(v, 0, [])); } catch (e) { return String(v); }
+    try {
+      var s = simplify(v, 0, []);
+      return typeof s === 'string' ? s : JSON.stringify(s);
+    } catch (e) { return String(v); }
   }
 
   // simplify turns a value into something JSON can show and a reader can use:
   // errors, responses and DOM nodes by what identifies them, Map and Set by
   // their contents, a cycle as [Circular], kept to 3 levels and 20 entries.
+  // An axios response (what Inertia's events carry) is a plain object, so it
+  // is recognised by shape; its body and headers would bury the URL.
+  function isAxiosResponse(v) {
+    return typeof v.status === 'number' && v.config && typeof v.config === 'object' && typeof v.config.url === 'string';
+  }
+
   function simplify(v, depth, seen) {
     if (v === null || typeof v !== 'object' && typeof v !== 'function') return v === undefined ? null : v;
     if (typeof v === 'function') return '[Function ' + (v.name || 'anonymous') + ']';
     if (v instanceof Error) return v.name + ': ' + v.message;
     if (typeof Response !== 'undefined' && v instanceof Response) return v.status + ' ' + v.url;
     if (typeof XMLHttpRequest !== 'undefined' && v instanceof XMLHttpRequest) return v.status + ' ' + v.responseURL;
+    if (isAxiosResponse(v)) return v.status + ' ' + (v.config.method ? String(v.config.method).toUpperCase() + ' ' : '') + ((v.request && v.request.responseURL) || v.config.url);
     if (v.nodeType === 1) return v.tagName.toLowerCase() + (v.id ? '#' + v.id : '');
     if (typeof v.nodeType === 'number') return v.nodeName;
     if (seen.indexOf(v) >= 0) return '[Circular]';
@@ -64,9 +74,12 @@
   }
 
   function report(ev) {
+    // An identical report within a second is a loop, not the user doing it
+    // again, so only that is dropped; MAX still caps a page view.
     var key = ev.type + '|' + ev.message + '|' + (ev.file || '') + ':' + (ev.line || 0);
-    if (seen[key] || sent >= MAX) return;
-    seen[key] = true;
+    var now = Date.now();
+    if (now - (seen[key] || -Infinity) < 1000 || sent >= MAX) return;
+    seen[key] = now;
     sent++;
     ev.message = cut(ev.message, 2000);
     if (ev.stack) ev.stack = cut(ev.stack, 8000);
@@ -74,7 +87,6 @@
     ev.page = page;
     ev.ua = navigator.userAgent;
     ev.at = new Date().toISOString();
-    if (cfg.verbose) say('captured ' + (ev.level ? 'console.' + ev.level : ev.type) + ':', ev.message);
     queue.push(ev);
     if (!timer) timer = setTimeout(flush, 300);
   }
@@ -218,5 +230,5 @@
     .concat(cfg.resources ? ['failed resources'] : [])
     .concat((cfg.events || []).map(function (d) { return d.event; }))
     .concat(cfg.navigation ? ['page views'] : []);
-  say('browser capture active, reporting ' + watching.join(', ') + ' to the lerd dashboard');
+  say('browser capture active, reporting ' + watching.join(', ') + ' to the lerd dashboard' + (cfg.lens ? ': ' + cfg.lens : ''));
 })();
