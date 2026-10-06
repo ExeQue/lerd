@@ -1620,5 +1620,16 @@
   "setup_notify_hint": "Mails capturés, workers en échec, tâches terminées",
   "setup_theme_title": "Assortir à votre bureau",
   "setup_theme_hint": "Reprenez les couleurs de votre bureau et suivez-les",
-  "setup_theme_cta": "Utiliser {name}"
+  "setup_theme_cta": "Utiliser {name}",
+  "sites_openInEditor": "Ouvrir dans l’éditeur",
+  "editor_label": "Éditeur",
+  "editor_custom": "Commande personnalisée",
+  "editor_settingsTitle": "Éditeur",
+  "editor_settingsDescription": "L’éditeur dans lequel l’en-tête du site ouvre le projet et la fenêtre Debug ouvre les chemins de fichiers. Désactivé, les chemins s’ouvrent toujours dans un éditeur installé.",
+  "editor_groupFound": "Trouvés sur ce système",
+  "editor_groupOther": "Choisir",
+  "editor_customOption": "Personnalisé…",
+  "editor_customTitle": "Éditeur personnalisé",
+  "editor_customHint": "Mets {file} et {line} là où vont le chemin et la ligne. Une URL (scheme://…) s’ouvre via le bureau, le reste s’exécute comme commande.",
+  "editor_disabled": "Désactivé"
 }
