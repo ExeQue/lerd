@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 const requestFixture = `{
@@ -126,5 +128,34 @@ func TestRequestTool_RefusesAnUnknownTab(t *testing.T) {
 	res, _ := execRequestTool(map[string]any{"action": "tab", "rid": "r1", "tab": "nope"})
 	if b, _ := json.Marshal(res); !strings.Contains(string(b), `nope`) || !strings.Contains(string(b), `isError`) {
 		t.Errorf("unknown tab not refused: %s", b)
+	}
+}
+
+// An unscoped list is the requests of the site the MCP server runs for.
+func TestRequestList_DefaultsToTheCurrentSite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	if err := config.AddSite(config.Site{Name: "acme", Path: dir, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	origPath := defaultSitePath
+	defaultSitePath = dir
+	t.Cleanup(func() { defaultSitePath = origPath })
+	var got string
+	orig := uiRoundTrip
+	uiRoundTrip = func(req *http.Request) ([]byte, int, error) {
+		got = req.URL.Query().Get("site")
+		return []byte(`[]`), http.StatusOK, nil
+	}
+	t.Cleanup(func() { uiRoundTrip = orig })
+
+	callRequestTool(t, map[string]any{"action": "list"})
+	if got != "acme" {
+		t.Fatalf("site filter = %q, want acme", got)
+	}
+	callRequestTool(t, map[string]any{"action": "list", "site": "other"})
+	if got != "other" {
+		t.Fatalf("explicit site = %q, want other", got)
 	}
 }
