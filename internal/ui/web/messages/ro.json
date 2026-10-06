@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Formatează",
   "debugbar_label": "bara de depanare lerd",
   "debugbar_show": "Arată bara sau trage-o în alt colț",
+  "debugbar_openSite": "Deschide {domain} în lerd",
   "debugbar_openRequest": "Deschide această cerere",
   "debugbar_time": "Timpul de răspuns și împărțirea lui",
   "debugbar_queries": "interogări",

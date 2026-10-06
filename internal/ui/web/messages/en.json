@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Format",
   "debugbar_label": "lerd debug bar",
   "debugbar_show": "Show the debug bar, or drag it to another corner",
+  "debugbar_openSite": "Open {domain} in lerd",
   "debugbar_openRequest": "Open this request",
   "debugbar_time": "Response time and where it went",
   "debugbar_queries": "queries",

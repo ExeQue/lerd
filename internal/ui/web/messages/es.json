@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Formatear",
   "debugbar_label": "barra de depuración de lerd",
   "debugbar_show": "Mostrar la barra o arrastrarla a otra esquina",
+  "debugbar_openSite": "Abrir {domain} en lerd",
   "debugbar_openRequest": "Abrir esta petición",
   "debugbar_time": "Tiempo de respuesta y en qué se fue",
   "debugbar_queries": "consultas",

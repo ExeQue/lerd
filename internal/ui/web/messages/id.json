@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Format",
   "debugbar_label": "bilah debug lerd",
   "debugbar_show": "Tampilkan bilah, atau seret ke sudut lain",
+  "debugbar_openSite": "Buka {domain} di lerd",
   "debugbar_openRequest": "Buka permintaan ini",
   "debugbar_time": "Waktu respons dan penggunaannya",
   "debugbar_queries": "kueri",

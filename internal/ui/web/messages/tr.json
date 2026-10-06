@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Biçimlendir",
   "debugbar_label": "lerd hata ayıklama çubuğu",
   "debugbar_show": "Çubuğu göster veya başka bir köşeye sürükle",
+  "debugbar_openSite": "{domain} sitesini lerd'de aç",
   "debugbar_openRequest": "Bu isteği aç",
   "debugbar_time": "Yanıt süresi ve dağılımı",
   "debugbar_queries": "sorgu",

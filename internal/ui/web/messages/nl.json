@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Opmaken",
   "debugbar_label": "lerd-debugbalk",
   "debugbar_show": "Toon de balk, of sleep hem naar een andere hoek",
+  "debugbar_openSite": "{domain} openen in lerd",
   "debugbar_openRequest": "Dit verzoek openen",
   "debugbar_time": "Responstijd en waar die heen ging",
   "debugbar_queries": "queries",

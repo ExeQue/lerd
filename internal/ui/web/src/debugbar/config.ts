@@ -9,6 +9,7 @@ export interface BarConfig {
   palette: string;
   base: string;
   site: string;
+  domain: string;
   path: string;
   // roots are the linked sites' folders; local says the site can only be
   // reached from this machine, so the bar may read code and open the editor.
@@ -23,5 +24,5 @@ declare const __lerdBarConfig: BarConfig | undefined;
 
 export const barConfig: BarConfig =
   typeof __lerdBarConfig === 'undefined'
-    ? { style: 'dock', edge: 'bottom', corner: 'bottom-right', theme: 'auto', palette: '', base: '/_lerd/browser/bar/', site: '', path: '', roots: [], local: false, themes: [] }
+    ? { style: 'dock', edge: 'bottom', corner: 'bottom-right', theme: 'auto', palette: '', base: '/_lerd/browser/bar/', site: '', domain: '', path: '', roots: [], local: false, themes: [] }
     : __lerdBarConfig;

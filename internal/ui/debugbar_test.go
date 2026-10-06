@@ -92,7 +92,7 @@ func TestDebugbar_ScriptCarriesTheSettings(t *testing.T) {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
 	body := w.Body.String()
-	for _, want := range []string{`"style":"compact"`, `"corner":"bottom-right"`, `"base":"/_lerd/browser/bar/"`, `"themes":`} {
+	for _, want := range []string{`"style":"compact"`, `"corner":"bottom-right"`, `"base":"/_lerd/browser/bar/"`, `"domain":"shop.test"`, `"themes":`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s in the script's config", want)
 		}

@@ -1806,6 +1806,7 @@
   "requests_sql_format": "整形",
   "debugbar_label": "lerd デバッグバー",
   "debugbar_show": "バーを表示、またはドラッグして別の隅へ",
+  "debugbar_openSite": "lerd で {domain} を開く",
   "debugbar_openRequest": "このリクエストを開く",
   "debugbar_time": "応答時間とその内訳",
   "debugbar_queries": "クエリ",

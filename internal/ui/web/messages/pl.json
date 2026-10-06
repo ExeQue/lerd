@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Formatuj",
   "debugbar_label": "pasek debugowania lerd",
   "debugbar_show": "Pokaż pasek lub przeciągnij go do innego rogu",
+  "debugbar_openSite": "Otwórz {domain} w lerd",
   "debugbar_openRequest": "Otwórz to żądanie",
   "debugbar_time": "Czas odpowiedzi i jego podział",
   "debugbar_queries": "zapytania",

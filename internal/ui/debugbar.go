@@ -137,11 +137,12 @@ func serveDebugbarScript(w http.ResponseWriter, r *http.Request, site config.Sit
 		Palette string           `json:"palette"`
 		Base    string           `json:"base"`
 		Site    string           `json:"site"`
+		Domain  string           `json:"domain"`
 		Path    string           `json:"path"`
 		Roots   []string         `json:"roots"`
 		Local   bool             `json:"local"`
 		Themes  []config.UITheme `json:"themes"`
-	}{settings.Resolve(), theme, config.BrowserCapturePath + "/bar/", site.Name, site.Path, siteRoots(), cfg != nil && !cfg.LAN.Exposed, withDesktopTheme(themes)})
+	}{settings.Resolve(), theme, config.BrowserCapturePath + "/bar/", site.Name, site.PrimaryDomain(), site.Path, siteRoots(), cfg != nil && !cfg.LAN.Exposed, withDesktopTheme(themes)})
 	body := "(function(__lerdBarConfig){" + string(bundle) + "\n})(" + string(conf) + ");\n"
 	sum := sha256.Sum256([]byte(body))
 	etag := `"` + hex.EncodeToString(sum[:8]) + `"`

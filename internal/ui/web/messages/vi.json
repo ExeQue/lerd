@@ -1806,6 +1806,7 @@
   "requests_sql_format": "Định dạng",
   "debugbar_label": "thanh gỡ lỗi lerd",
   "debugbar_show": "Hiện thanh, hoặc kéo sang góc khác",
+  "debugbar_openSite": "Mở {domain} trong lerd",
   "debugbar_openRequest": "Mở yêu cầu này",
   "debugbar_time": "Thời gian phản hồi và phân bổ",
   "debugbar_queries": "truy vấn",

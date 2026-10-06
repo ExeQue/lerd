@@ -6,6 +6,7 @@
   import { tooltip } from '$lib/tooltip';
   import { summarize, path, popoverPlace } from './chips';
   import { clock } from '$lib/requestTime';
+  import { VHOST_URL } from '$lib/vhost';
   import type { BarConfig } from './config';
   import { m } from '../paraglide/messages.js';
 
@@ -143,9 +144,13 @@
     store.set(CORNER_KEY, corner);
     dragged = true;
   }
+  // Open, the mark leads to the site's page in lerd, which only resolves on
+  // this machine.
+  const siteLink = $derived(!min && config.local && config.domain ? `${VHOST_URL}/#sites/${config.domain}` : '');
   function markClick() {
     if (dragged) return void (dragged = false);
     if (min) setMin(false);
+    else if (siteLink) window.open(siteLink, '_blank', 'noopener');
   }
 
   // The chip a view opened from, so the dialog grows out of it.
@@ -193,7 +198,7 @@
     aria-label={m.debugbar_label()}
   >
     <div class="lbar-in">
-      <button class="mark" class:loading={!s} type="button" onpointerdown={down} onpointermove={move} onpointerup={up} onclick={markClick} aria-label={m.debugbar_show()} use:tooltip={min && !moving && !dragPos ? (s ? m.debugbar_show() : m.debugbar_waiting()) : ''}>L</button>
+      <button class="mark" class:loading={!s} type="button" onpointerdown={down} onpointermove={move} onpointerup={up} onclick={markClick} aria-label={siteLink ? m.debugbar_openSite({ domain: config.domain }) : m.debugbar_show()} use:tooltip={min && !moving && !dragPos ? (s ? m.debugbar_show() : m.debugbar_waiting()) : siteLink ? m.debugbar_openSite({ domain: config.domain }) : ''}>L</button>
       {#if !s}
         <span class="chip loading" role="status"><span class="spin" aria-hidden="true"></span><span class="k">{m.debugbar_loading()}</span></span>
         <button class="icon-btn" type="button" onclick={(e) => { e.stopPropagation(); setMin(true); }} aria-label={m.debugbar_minimise()} use:tooltip={m.debugbar_minimise()}>{@render icon('M6 6l12 12M18 6L6 18')}</button>

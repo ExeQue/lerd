@@ -1806,6 +1806,7 @@
   "requests_sql_format": "格式化",
   "debugbar_label": "lerd 调试栏",
   "debugbar_show": "显示调试栏，或拖到其他角落",
+  "debugbar_openSite": "在 lerd 中打开 {domain}",
   "debugbar_openRequest": "打开此请求",
   "debugbar_time": "响应时间及其分布",
   "debugbar_queries": "查询",
