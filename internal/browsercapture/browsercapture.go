@@ -191,8 +191,8 @@ type Report struct {
 
 var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true, "request": true, "timing": true}
 
-// MaxReports caps how many entries one post may carry; the script itself
-// stops after 50 per page.
+// MaxReports caps how many entries one post may carry; the script posts a
+// busy page's entries in chunks of this size.
 const MaxReports = 50
 
 // Events turns a posted batch into browser events for the site nginx named.

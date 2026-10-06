@@ -4,7 +4,7 @@
   window.__lerdBrowserCapture = true;
   var cfg = __LERD_CONFIG__;
   var endpoint = cfg.endpoint;
-  var queue = [], seen = {}, sent = 0, linked = 0, timer = null, MAX = 50;
+  var queue = [], seen = {}, sent = 0, linked = 0, timer = null, MAX = 50, MAX_LINKED = 1000;
   // One id per page view, a SPA navigation included, so the dashboard groups
   // each view's events together. The first view takes the id of the request
   // that served the page, which nginx put on this script's tag.
@@ -89,8 +89,11 @@
       if (ev.lookup) ev.timing = timing(entryFor(ev.lookup[0], ev.lookup[1]));
       delete ev.lookup;
     });
-    var body = JSON.stringify(queue);
-    queue = [];
+    // lerd takes at most MAX entries per post, so a busy page posts in chunks.
+    while (queue.length) post(JSON.stringify(queue.splice(0, MAX)));
+  }
+
+  function post(body) {
     var blob = new Blob([body], { type: 'application/json' });
     if (!(navigator.sendBeacon && navigator.sendBeacon(endpoint, blob)) && origFetch) {
       origFetch.call(window, endpoint, { method: 'POST', body: body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(function () {});
@@ -103,7 +106,7 @@
     // own, so a chatty page cannot use up the one its errors need.
     var key = ev.type + '|' + ev.message + '|' + (ev.file || '') + ':' + (ev.line || 0) + '|' + (ev.rid || '');
     var now = Date.now();
-    if (now - (seen[key] || -Infinity) < 1000 || (ev.type === 'request' ? linked >= MAX : sent >= MAX)) return;
+    if (now - (seen[key] || -Infinity) < 1000 || (ev.type === 'request' ? linked >= MAX_LINKED : sent >= MAX)) return;
     seen[key] = now;
     if (ev.type === 'request') linked++;
     else sent++;

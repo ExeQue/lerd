@@ -15,7 +15,7 @@ Uncaught errors and unhandled promise rejections are always reported while captu
 
 Every page view starts a new group in the dashboard, so an error a single-page app throws after navigating sits under the page it happened on, not under the one the app was first loaded on.
 
-The script stops after 50 events per page view and drops an identical report that arrives within a second of the last one, so a loop that throws on every frame cannot flood the dashboard while the same error caused again a moment later is still reported.
+The script stops after 50 events per page view and drops an identical report that arrives within a second of the last one, so a loop that throws on every frame cannot flood the dashboard while the same error caused again a moment later is still reported. Requests a page view links to their PHP requests have a budget of their own, up to 1000.
 
 When the script loads it writes one line to the page's console naming what it reports, so you can see at a glance that capture is live.
 

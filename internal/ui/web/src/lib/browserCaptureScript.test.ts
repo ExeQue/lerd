@@ -9,8 +9,10 @@ type Report = { type: string; nav?: string; message: string; page: string; level
 // Every load is a fresh script instance in the same jsdom, and earlier ones keep
 // their history hooks, so each gets its own endpoint and only its posts count.
 let instance = 0;
+let posts: number[] = [];
 function load(cfg: Record<string, unknown>): Report[] {
   const sent: Report[] = [];
+  posts = [];
   const endpoint = `/_lerd/browser-${++instance}`;
   delete (window as unknown as Record<string, unknown>).__lerdBrowserCapture;
   (globalThis as unknown as { Blob: unknown }).Blob = class {
@@ -20,7 +22,11 @@ function load(cfg: Record<string, unknown>): Report[] {
   Object.defineProperty(navigator, 'sendBeacon', {
     configurable: true,
     value: (url: string, blob: { parts: string[] }) => {
-      if (url === endpoint) sent.push(...(JSON.parse(blob.parts[0]) as Report[]));
+      if (url === endpoint) {
+        const batch = JSON.parse(blob.parts[0]) as Report[];
+        posts.push(batch.length);
+        sent.push(...batch);
+      }
       else prev?.(url, blob);
       return true;
     }
@@ -238,6 +244,18 @@ describe('browser capture script', () => {
     const req = sent.find((r) => r.type === 'request') as unknown as { timing: Record<string, number>; lookup?: unknown };
     expect(req.timing).toEqual({ requestStart: 2, responseStart: 30, responseEnd: 34 });
     expect(req.lookup).toBeUndefined();
+    window.fetch = realFetch;
+  });
+
+  it('reports every request a busy page links, in posts lerd accepts', async () => {
+    const realFetch = window.fetch;
+    let n = 0;
+    window.fetch = (() => Promise.resolve({ status: 200, headers: { get: (h: string) => (h === 'X-Lerd-Rid' ? `rid-${++n}` : null) } })) as unknown as typeof fetch;
+    const sent = load({ navigation: false });
+    for (let i = 0; i < 120; i++) await fetch(`/api/item/${i}`);
+    settle();
+    expect(sent.filter((r) => r.type === 'request')).toHaveLength(120);
+    expect(Math.max(...posts)).toBeLessThanOrEqual(50);
     window.fetch = realFetch;
   });
 });
