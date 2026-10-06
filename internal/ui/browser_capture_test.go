@@ -28,8 +28,11 @@ func setupBrowserCapture(t *testing.T, debug, siteOn bool) *dumps.Server {
 	return withDumpsServer(t)
 }
 
-func browserRequest(method, path, body string, viaNginx bool) *httptest.ResponseRecorder {
+func browserRequest(method, path, body string, viaNginx bool, headers ...string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	for i := 0; i+1 < len(headers); i += 2 {
+		r.Header.Set(headers[i], headers[i+1])
+	}
 	r.Header.Set("X-Lerd-Site", "shop")
 	r.Header.Set("X-Lerd-Host", "shop.test")
 	if viaNginx {
@@ -98,5 +101,34 @@ func TestBrowserCapture_LeavesOtherPathsToTheMux(t *testing.T) {
 	setupBrowserCapture(t, true, true)
 	if w := browserRequest("GET", "/api/status", "", false); w.Code != http.StatusNotFound {
 		t.Fatalf("status %d, want the wrapped handler's 404", w.Code)
+	}
+}
+
+// A page on another site can fire a simple POST at the endpoint; the browser's
+// own provenance headers, which a page cannot set, are what turn it away.
+func TestBrowserCapture_RefusesAReportFromAnotherSite(t *testing.T) {
+	report := `[{"type":"error","message":"planted"}]`
+	for _, tc := range []struct {
+		name    string
+		headers []string
+		want    int
+	}{
+		{"same-origin fetch", []string{"Sec-Fetch-Site", "same-origin", "Origin", "https://shop.test"}, http.StatusNoContent},
+		{"cross-site page", []string{"Sec-Fetch-Site", "cross-site", "Origin", "https://evil.example"}, http.StatusForbidden},
+		{"same-site subdomain", []string{"Sec-Fetch-Site", "same-site", "Origin", "https://other.shop.test"}, http.StatusForbidden},
+		{"older browser, other origin", []string{"Origin", "https://evil.example"}, http.StatusForbidden},
+		{"older browser, own origin", []string{"Origin", "https://shop.test"}, http.StatusNoContent},
+		{"no browser headers", nil, http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := setupBrowserCapture(t, true, true)
+			w := browserRequest("POST", browserReportPath, report, true, tc.headers...)
+			if w.Code != tc.want {
+				t.Fatalf("status %d, want %d", w.Code, tc.want)
+			}
+			if landed := srv.Len() > 0; landed != (tc.want == http.StatusNoContent) {
+				t.Fatalf("report landed = %v with status %d", landed, w.Code)
+			}
+		})
 	}
 }

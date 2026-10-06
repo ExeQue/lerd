@@ -3,7 +3,9 @@ package ui
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/geodro/lerd/internal/browsercapture"
@@ -43,6 +45,10 @@ func withBrowserCapture(next http.Handler) http.Handler {
 		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !fromSitePage(r) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		srv := dumpsServer.Load()
@@ -154,4 +160,29 @@ func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
 		presets = []browsercapture.PresetStatus{}
 	}
 	writeJSON(w, presets)
+}
+
+// fromSitePage reports whether a report was posted by the site's own page.
+// nginx names the site, but any page open in the browser can fire a simple
+// POST at its endpoint, so the browser's provenance headers, which a page
+// cannot set, must say the post came from the site itself. A client without
+// them is not a browser page and could forge either header anyway.
+func fromSitePage(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
+		return site == "same-origin"
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	return err == nil && u.Hostname() == hostOnly(r.Header.Get("X-Lerd-Host"))
+}
+
+// hostOnly drops a port from a host header value.
+func hostOnly(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
 }
