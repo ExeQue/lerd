@@ -20,7 +20,7 @@ export interface BarSummary {
   logs: number;
   appTabs: { id: string; title: string }[];
   user: string;
-  children: { rid: string; url: string; status: number; ms: number; at: string }[];
+  children: { rid: string; url: string; status: number; ms: number; at: string; operation: string; operations: string[] }[];
   childFailures: number;
 }
 
@@ -40,8 +40,11 @@ export function summarize(d: RequestDetail): BarSummary {
     const t = data(e);
     if (t.id !== undefined && !tabs.has(String(t.id))) tabs.set(String(t.id), String(t.title ?? t.id));
   }
-  // Jobs the request ran have their own tab; the chip is for what the page sent.
-  const children = (d.children ?? []).filter((c) => c.via !== 'job').map((c) => ({ rid: c.rid, url: c.url ?? '', status: Number(c.status ?? 0), ms: Number(c.duration_ms ?? 0), at: c.at ?? '' }));
+  // Jobs the request ran have their own tab; the chip is for what the page sent, newest first.
+  const children = (d.children ?? [])
+    .filter((c) => c.via !== 'job')
+    .map((c) => ({ rid: c.rid, url: c.url ?? '', status: Number(c.status ?? 0), ms: Number(c.duration_ms ?? 0), at: c.at ?? '', operation: c.operation ?? '', operations: c.operations ?? [] }))
+    .sort((a, b) => b.at.localeCompare(a.at));
   return {
     method: d.method ?? req.method ?? '',
     uri: path(d.uri ?? req.uri ?? ''),

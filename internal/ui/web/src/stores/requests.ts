@@ -13,6 +13,8 @@ export interface RequestLink {
   at?: string;
   duration_ms?: number;
   timing?: Record<string, number>;
+  operation?: string;
+  operations?: string[];
 }
 
 export interface RequestSummary {

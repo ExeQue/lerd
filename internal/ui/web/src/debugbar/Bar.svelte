@@ -199,7 +199,7 @@
         <button class="icon-btn" type="button" onclick={(e) => { e.stopPropagation(); setMin(true); }} aria-label={m.debugbar_minimise()} use:tooltip={m.debugbar_minimise()}>{@render icon('M6 6l12 12M18 6L6 18')}</button>
       {:else}
       <button class="chip req" type="button" onclick={(e) => open(e, 'request')} use:tooltip={m.debugbar_openRequest()}>
-        <span class="dot" class:err={s.failed}></span>{#if s.method}<span class="method">{s.method}</span>{/if}<span class="font-mono">{s.uri}</span>{#if s.status}<span class={s.status >= 400 ? 'err' : 'ok'}>{s.status}</span>{/if}
+        <span class="dot" class:err={s.failed}></span>{#if s.method}<span class="method">{s.method}</span>{/if}<span class="font-mono uri">{s.uri}</span>{#if s.status}<span class={s.status >= 400 ? 'err' : 'ok'}>{s.status}</span>{/if}
       </button>
       {#if s.timeMs}
       <button class="chip" type="button" onclick={(e) => open(e, 'performance')} use:tooltip={m.debugbar_time()}>
@@ -258,7 +258,7 @@
         <div class="rows">
           {#each s.children as c (c.rid)}
             <button class="bar-row" style="grid-template-columns:minmax(0,1fr) 36px 52px 92px" type="button" onclick={(e) => open(e, 'performance', c.rid)}>
-              <span class="path">{path(c.url)}</span><span class={c.status >= 400 || !c.status ? 'err' : 'ok'}>{c.status || '—'}</span><span class="tabular-nums text-right">{c.ms ? ms(c.ms) : ''}</span><span class="tabular-nums text-right whitespace-nowrap" style="color:var(--muted)">{clock(c.at)}</span>
+              {#if c.operation}<span class="path op" title={c.operations.join('\n')}>{@render icon('M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9zM12 3l7.8 13.5H4.2z')}{c.operation}</span>{:else}<span class="path">{path(c.url)}</span>{/if}<span class={c.status >= 400 || !c.status ? 'err' : 'ok'}>{c.status || '—'}</span><span class="tabular-nums text-right">{c.ms ? ms(c.ms) : ''}</span><span class="tabular-nums text-right whitespace-nowrap" style="color:var(--muted)">{clock(c.at)}</span>
             </button>
           {/each}
         </div>

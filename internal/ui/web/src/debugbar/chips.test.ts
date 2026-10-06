@@ -30,6 +30,16 @@ describe('summarize', () => {
   });
 });
 
+describe('summarize, child requests', () => {
+  it('lists the newest first, each GraphQL call named by its operation', () => {
+    const s = summarize({ ...detail, children: [
+      { rid: 'old', url: '/graphql', at: '2026-10-06T10:24:46.370Z', operation: 'query Cart', operations: ['query Cart'] },
+      { rid: 'new', url: '/api/stock', at: '2026-10-06T10:24:46.898Z' }
+    ] } as unknown as RequestDetail);
+    expect(s.children.map((c) => [c.rid, c.operation])).toEqual([['new', ''], ['old', 'query Cart']]);
+  });
+});
+
 describe('summarize, a page no PHP request served', () => {
   it('reads as the path the browser showed, with no status or time', () => {
     const s = summarize({ rid: 'p1', type: 'page', uri: 'https://spa.test/orders?x=1', started: '', counts: {}, problems: [], events: {} } as unknown as RequestDetail);

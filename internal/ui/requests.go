@@ -27,6 +27,9 @@ type RequestLink struct {
 	At         string             `json:"at,omitempty"`
 	DurationMS float64            `json:"duration_ms,omitempty"`
 	Timing     map[string]float64 `json:"timing,omitempty"`
+	// Operation and Operations name the GraphQL a sent request ran, as on its summary.
+	Operation  string   `json:"operation,omitempty"`
+	Operations []string `json:"operations,omitempty"`
 }
 
 // RequestSummary is one request as a list row: what it was, how it ended and
@@ -129,11 +132,61 @@ func collectRequests(events []dumps.Event) (map[string]*requestAcc, []string, ma
 			parents[r.RID] = &RequestLink{RID: rid, Site: e.Ctx.Site, URL: e.Ctx.Request, Via: r.Via, Cross: r.Cross, At: e.TS, DurationMS: r.Duration, Timing: r.Timing}
 		}
 	}
+	for _, kids := range children {
+		for i := range kids {
+			if a := accs[kids[i].RID]; a != nil {
+				kids[i].Operation, kids[i].Operations = graphqlOperations(a.events)
+			}
+		}
+	}
 	return accs, order, parents, children
+}
+
+// graphqlOperations labels the GraphQL operations a request ran, one per entry
+// of a batch, and names the request by the first with "+N" for the rest.
+func graphqlOperations(events []dumps.Event) (string, []string) {
+	var ops []string
+	for _, e := range events {
+		if e.Kind != dumps.KindRequest {
+			continue
+		}
+		var d struct {
+			GraphQL []struct {
+				Type   string `json:"type"`
+				Name   string `json:"name"`
+				Fields []struct {
+					Name string `json:"name"`
+				} `json:"fields"`
+			} `json:"graphql"`
+		}
+		if json.Unmarshal(e.Data, &d) != nil {
+			continue
+		}
+		for _, op := range d.GraphQL {
+			label := op.Type + " " + op.Name
+			if op.Name == "" {
+				names := make([]string, 0, len(op.Fields))
+				for _, f := range op.Fields {
+					names = append(names, f.Name)
+				}
+				label = op.Type + " { " + strings.Join(names, ", ") + " }"
+			}
+			ops = append(ops, label)
+		}
+	}
+	if len(ops) == 0 {
+		return "", nil
+	}
+	name := ops[0]
+	if more := len(ops) - 1; more > 0 {
+		name += fmt.Sprintf(" +%d", more)
+	}
+	return name, ops
 }
 
 func summarize(a *requestAcc, parent *RequestLink, kids []RequestLink) RequestSummary {
 	s := RequestSummary{RID: a.rid, Counts: map[string]int{}, Problems: []string{}, Parent: parent, Children: kids}
+	s.Operation, s.Operations = graphqlOperations(a.events)
 	problems := map[string]bool{}
 	startOf := ""
 	var queries []dumps.Event
@@ -156,40 +209,16 @@ func summarize(a *requestAcc, parent *RequestLink, kids []RequestLink) RequestSu
 		switch e.Kind {
 		case dumps.KindRequest:
 			var d struct {
-				Method  string  `json:"method"`
-				URI     string  `json:"uri"`
-				Status  int     `json:"status"`
-				TimeMS  float64 `json:"time_ms"`
-				Route   string  `json:"route"`
-				Nginx   float64 `json:"nginx_ms"`
-				Queue   float64 `json:"queue_ms"`
-				GraphQL []struct {
-					Type   string `json:"type"`
-					Name   string `json:"name"`
-					Fields []struct {
-						Name string `json:"name"`
-					} `json:"fields"`
-				} `json:"graphql"`
+				Method string  `json:"method"`
+				URI    string  `json:"uri"`
+				Status int     `json:"status"`
+				TimeMS float64 `json:"time_ms"`
+				Route  string  `json:"route"`
+				Nginx  float64 `json:"nginx_ms"`
+				Queue  float64 `json:"queue_ms"`
 			}
 			if json.Unmarshal(e.Data, &d) == nil {
 				s.Method, s.URI, s.Status, s.TimeMS, s.Route = d.Method, d.URI, d.Status, d.TimeMS, d.Route
-				for _, op := range d.GraphQL {
-					label := op.Type + " " + op.Name
-					if op.Name == "" {
-						names := make([]string, 0, len(op.Fields))
-						for _, f := range op.Fields {
-							names = append(names, f.Name)
-						}
-						label = op.Type + " { " + strings.Join(names, ", ") + " }"
-					}
-					s.Operations = append(s.Operations, label)
-				}
-				if len(s.Operations) > 0 {
-					s.Operation = s.Operations[0]
-					if more := len(s.Operations) - 1; more > 0 {
-						s.Operation += fmt.Sprintf(" +%d", more)
-					}
-				}
 				s.NginxMS, s.QueueMS = d.Nginx, d.Queue
 				// The event is sent when the request ends, so its start is that
 				// moment less the time it took.

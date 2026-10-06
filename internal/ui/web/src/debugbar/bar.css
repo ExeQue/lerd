@@ -5,13 +5,14 @@
   --red-soft: color-mix(in srgb, var(--color-lerd-red) 10%, transparent);
   --bar: #ffffff; --bar-fg: #27272a; --chip: #f4f4f5; --chip-hover: #e9e9ec; --border: #e4e4e7; --muted: #71717a;
   --amber: #d97706; --amber-soft: rgba(217, 119, 6, .12); --green: #059669; --rose: #e11d48;
-  --slate: #94a3b8; --blue: #2563eb; --yellow: #f2b200;
+  --slate: #94a3b8; --blue: #2563eb; --yellow: #f2b200; --pink: #be185d;
   font-family: var(--font-sans); font-size: 14px; line-height: 1.45; color: #18181b; text-align: left;
   -webkit-font-smoothing: antialiased; letter-spacing: normal; text-transform: none;
 }
 .lerd-root.dark {
   --bar: var(--color-lerd-card); --bar-fg: #e4e4e7; --chip: #1f1f1f; --chip-hover: #2a2a2a; --border: var(--color-lerd-border); --muted: #a1a1aa;
   --amber-soft: rgba(217, 119, 6, .18); --red-soft: color-mix(in srgb, var(--color-lerd-red) 16%, transparent);
+  --pink: #f9a8d4;
   color: #f4f4f5; color-scheme: dark;
 }
 /* Every scrolling area gets the same hairline scrollbar, taking the accent while used. */
@@ -33,7 +34,8 @@
 .chip:active { transform: scale(.97); }
 .chip .k { color: var(--muted); }
 .chip svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
-.chip.req { background: var(--chip); gap: 8px; }
+.chip.req { background: var(--chip); gap: 8px; max-width: 360px; }
+.chip.req .uri { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); flex: none; }
 .dot.err { background: var(--rose); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose) 22%, transparent); }
 .method { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
@@ -88,6 +90,9 @@
 .bar-row:first-child { border-top: 0; }
 .bar-row:hover { background: var(--chip); }
 .bar-row .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+/* A GraphQL call is named by its operation, as in the Debug window. */
+.bar-row .op { color: var(--pink); }
+.bar-row .op svg { width: 13px; height: 13px; display: inline; vertical-align: -2px; margin-right: 4px; }
 /* Loading: the request is on its way or still running. */
 .chip.loading { color: var(--muted); cursor: default; }
 .chip.loading:hover { background: none; }

@@ -89,3 +89,15 @@ func TestRequests_NameAGraphQLRequestByItsOperations(t *testing.T) {
 		t.Fatalf("operation = %q, operations = %q", got.Operation, got.Operations)
 	}
 }
+
+// A page's GraphQL calls are named by their operations in its child list too.
+func TestRequestDetail_NamesAChildByItsGraphQLOperation(t *testing.T) {
+	events := []dumps.Event{
+		ev("1", "2026-10-04T10:00:00.900Z", dumps.KindBrowser, "page1", "shop", "browser", map[string]any{"type": "request", "message": "200 POST /graphql", "request": "/graphql", "status": 200, "rid": "g1", "via": "fetch"}),
+		ev("2", "2026-10-04T10:00:00.950Z", dumps.KindRequest, "g1", "shop", "fpm", map[string]any{"method": "POST", "uri": "/graphql", "status": 200, "graphql": []map[string]any{{"type": "query", "name": "Cart"}}}),
+	}
+	d, ok := requestDetail(events, "page1")
+	if !ok || len(d.Children) != 1 || d.Children[0].Operation != "query Cart" {
+		t.Fatalf("children = %+v", d.Children)
+	}
+}
