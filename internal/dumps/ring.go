@@ -6,8 +6,11 @@ import "sync"
 // overwrites the oldest entry. A single N+1 request can emit well over a
 // thousand query events, so the old 500-line cap could not even retain one
 // request's worth for analyze_queries to read; sized up so a fresh capture of
-// one pathological request survives long enough to be analyzed.
-const DefaultCapacity = 3000
+// one pathological request survives long enough to be analyzed. An event-heavy
+// request, a view per row or a query per item, still pushed the requests before
+// it out of 3000 within seconds. The size is configurable (dumps.buffer); this
+// is the default, matching config.DefaultDumpsBuffer.
+const DefaultCapacity = 5000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.
 // Snapshots are taken under a read lock and returned in insertion order.
@@ -28,6 +31,23 @@ func NewRing(capacity int) *Ring {
 	return &Ring{buf: make([]Event, capacity), cap: capacity}
 }
 
+// Resize changes how many events the ring keeps, carrying over the newest
+// ones that fit, so the size can change without restarting lerd-ui.
+func (r *Ring) Resize(capacity int) {
+	if capacity <= 0 {
+		capacity = DefaultCapacity
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.snapshot()
+	if len(kept) > capacity {
+		kept = kept[len(kept)-capacity:]
+	}
+	buf := make([]Event, capacity)
+	copy(buf, kept)
+	r.buf, r.cap, r.size, r.head = buf, capacity, len(kept), len(kept)%capacity
+}
+
 // Append stores e, evicting the oldest entry once the ring is full.
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
@@ -44,6 +64,10 @@ func (r *Ring) Append(e Event) {
 func (r *Ring) Snapshot() []Event {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.snapshot()
+}
+
+func (r *Ring) snapshot() []Event {
 	out := make([]Event, 0, r.size)
 	if r.size < r.cap {
 		out = append(out, r.buf[:r.size]...)
@@ -63,6 +87,8 @@ func (r *Ring) Len() int {
 
 // Cap returns the maximum number of entries the ring can hold.
 func (r *Ring) Cap() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.cap
 }
 
@@ -105,6 +131,9 @@ type FilterOpts struct {
 	Ctx string
 	// Kind exact-matches Event.Kind when non-empty (e.g. "query", "dump").
 	Kind string
+	// RID keeps one request's events: those it ran, and a browser event that
+	// names it as the request a fetch reached.
+	RID string
 	// SinceID drops events whose ID is lexicographically <= SinceID.
 	SinceID string
 	// Limit caps the returned slice to the most recent N entries.
@@ -127,6 +156,9 @@ func (r *Ring) Filter(opts FilterOpts) []Event {
 			continue
 		}
 		if opts.Kind != "" && e.Kind != opts.Kind {
+			continue
+		}
+		if opts.RID != "" && !e.OfRequest(opts.RID) {
 			continue
 		}
 		if opts.SinceID != "" && e.ID <= opts.SinceID {

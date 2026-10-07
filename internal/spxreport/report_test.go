@@ -149,3 +149,17 @@ func TestProfilesForRoutes(t *testing.T) {
 		t.Error("captures for a host we did not ask for must be ignored")
 	}
 }
+
+// The dashboard opens a request's flame graph through the id lerd wrote onto
+// its profile.
+func TestKeyForRID(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "spx-full-1", `{"key":"spx-full-1","custom_metadata_str":"lerd-rid:abc123"}`)
+	writeReport(t, dir, "spx-full-2", `{"key":"spx-full-2"}`)
+	if got := KeyForRID(dir, "abc123"); got != "spx-full-1" {
+		t.Errorf("key = %q", got)
+	}
+	if got := KeyForRID(dir, "other"); got != "" {
+		t.Errorf("unknown id = %q, want none", got)
+	}
+}

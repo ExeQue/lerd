@@ -42,6 +42,8 @@ The embedded UI follows the dashboard rather than the browser: it switches with 
 
 All reports land in one shared directory, `~/.local/share/lerd/spx/`, regardless of which site or PHP version produced them. Each report is labelled with its request host and URI so they stay distinguishable.
 
+While debug capture is on, lerd also writes the request's id onto its report as SPX custom metadata (`lerd-rid:<id>`), so [inspecting that request](request-timing.md#inspecting-one-request) offers a link straight to its flame graph. It is written only when SPX is profiling the request, since SPX crashes PHP-FPM when asked to label a request it is not profiling.
+
 ## Profiling CLI commands
 
 The cookie mechanism only covers HTTP requests. To profile an artisan command, a queue job, or a test run, use `lerd profile run`:

@@ -5,7 +5,7 @@
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
   import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
-  import { buildKindGroups, knownDebugSites, debugEvents, facetOf, isPageView } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, lensEvents, facetOf, isPageView } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import CaptureOffNotice from '$components/CaptureOffNotice.svelte';
   import Dropdown from '$components/Dropdown.svelte';
@@ -22,6 +22,8 @@
     siteScope?: string;
   }
   let { siteScope = '' }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
   const siteOff = $derived(scoped && $siteCaptureOn[siteScope] === false);
 

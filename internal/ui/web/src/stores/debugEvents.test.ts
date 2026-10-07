@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestChoices, requestEvents } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -127,5 +127,43 @@ describe('browser page views', () => {
   it('recognises a page view', () => {
     expect(isPageView(browser('load', 'navigation'))).toBe(true);
     expect(isPageView(browser('boom', 'error'))).toBe(false);
+  });
+});
+
+describe('one request', () => {
+  const at = (id: string, kind: string, ctx: Record<string, unknown>, data: unknown = {}) =>
+    ({ v: 1, id, ts: `2026-10-07T10:00:0${id}.000Z`, kind, ctx: { site: 'acme', ...ctx }, src: {}, data }) as unknown as DumpEvent;
+
+  it('holds what it ran and the browser failures that reached it', () => {
+    expect(ofRequest(at('1', 'query', { type: 'fpm', rid: 'r1' }), 'r1')).toBe(true);
+    expect(ofRequest(at('2', 'browser', { type: 'browser', rid: 'page' }, { type: 'network', rid: 'r1' }), 'r1')).toBe(true);
+    expect(ofRequest(at('3', 'query', { type: 'fpm', rid: 'r2' }), 'r1')).toBe(false);
+  });
+
+  it('offers a site web requests newest first, once each', () => {
+    const choices = requestChoices(
+      [
+        at('1', 'query', { type: 'fpm', rid: 'r1', request: 'GET /a' }),
+        at('2', 'query', { type: 'cli', rid: 'w1' }),
+        at('3', 'query', { type: 'fpm', rid: 'r2', request: 'POST /b' }),
+        at('4', 'view', { type: 'fpm', rid: 'r1', request: 'GET /a' }),
+        at('5', 'query', { type: 'fpm', rid: 'r3', site: 'other' })
+      ],
+      'acme'
+    );
+    expect(choices.map((c) => [c.rid, c.label])).toEqual([
+      ['r1', 'GET /a'],
+      ['r2', 'POST /b']
+    ]);
+  });
+});
+
+describe('a pinned request', () => {
+  const at = (id: string, test = false) =>
+    ({ v: 1, id, ts: `2026-10-07T10:00:0${id}.000Z`, kind: 'query', ctx: { type: 'fpm', site: 'acme', rid: 'r1', test }, src: {}, data: {} }) as unknown as DumpEvent;
+
+  it('starts from what the server kept and adds what the stream brought since', () => {
+    const got = requestEvents([at('2'), at('3')], 'r1', [at('1'), at('2'), at('4', true)], false);
+    expect(got.map((e) => e.id)).toEqual(['1', '2', '3']);
   });
 });

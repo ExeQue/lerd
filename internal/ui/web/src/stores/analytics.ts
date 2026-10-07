@@ -36,6 +36,9 @@ export interface RecentRequest {
   status: number;
   millis: number;
   cold: boolean;
+  // rid is the id debug capture grouped the request's events under, set when
+  // capture was on while it ran.
+  rid?: string;
 }
 
 export interface Analytics {

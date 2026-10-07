@@ -16,7 +16,7 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { debugEvents } from '$stores/debugEvents';
+  import { lensEvents } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
@@ -36,6 +36,8 @@
     siteScope?: string;
   }
   let { siteScope = '' }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
 
   // Queries ride the dumps SSE stream (shared receiver), so mounting this lens

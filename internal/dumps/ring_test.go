@@ -185,3 +185,34 @@ func TestRing_RemoveKeepsOrderAndFreesSpace(t *testing.T) {
 		t.Errorf("after append = %v, want b d e", got)
 	}
 }
+
+// One request's events are the ones it ran, plus a browser failure that names
+// it as the request a fetch reached.
+func TestRing_FilterByRID(t *testing.T) {
+	r := NewRing(8)
+	r.Append(Event{V: 1, ID: "a", Kind: KindQuery, Ctx: Context{Type: "fpm", RID: "r1"}})
+	r.Append(Event{V: 1, ID: "b", Kind: KindQuery, Ctx: Context{Type: "fpm", RID: "r2"}})
+	r.Append(Event{V: 1, ID: "c", Kind: KindBrowser, Ctx: Context{Type: "browser", RID: "page"}, Data: []byte(`{"type":"network","rid":"r1"}`)})
+	r.Append(Event{V: 1, ID: "d", Kind: KindBrowser, Ctx: Context{Type: "browser", RID: "r1"}})
+	if got := r.Filter(FilterOpts{RID: "r1"}); !equalIDs(got, []string{"a", "c", "d"}) {
+		t.Errorf("filter rid r1 = %v", ids(got))
+	}
+}
+
+// A ring resized while lerd-ui runs keeps the newest events that fit.
+func TestRing_ResizeKeepsTheNewest(t *testing.T) {
+	r := NewRing(4)
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		r.Append(mkEvent(id))
+	}
+	r.Resize(2)
+	if got := r.Snapshot(); !equalIDs(got, []string{"d", "e"}) || r.Cap() != 2 {
+		t.Fatalf("shrunk = %v cap %d", ids(got), r.Cap())
+	}
+	r.Resize(3)
+	r.Append(mkEvent("f"))
+	r.Append(mkEvent("g"))
+	if got := r.Snapshot(); !equalIDs(got, []string{"e", "f", "g"}) {
+		t.Fatalf("grown = %v", ids(got))
+	}
+}

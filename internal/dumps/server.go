@@ -151,6 +151,10 @@ func (s *Server) ClearKind(kind string) { s.ring.Remove(func(e Event) bool { ret
 // Len returns the number of buffered events.
 func (s *Server) Len() int { return s.ring.Len() }
 
+// Cap returns how many events the server keeps, and Resize changes it.
+func (s *Server) Cap() int            { return s.ring.Cap() }
+func (s *Server) Resize(capacity int) { s.ring.Resize(capacity) }
+
 // Subscribers returns the current subscriber count.
 func (s *Server) Subscribers() int { return s.hub.Count() }
 

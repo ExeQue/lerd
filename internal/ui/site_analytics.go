@@ -61,6 +61,8 @@ type recentRequest struct {
 	Status   int     `json:"status"`
 	Millis   float64 `json:"millis"`
 	Cold     bool    `json:"cold"`
+	// RID links the row to what debug capture recorded for the request.
+	RID string `json:"rid,omitempty"`
 }
 
 // analyticsResponse is the request-timing analytics view for one site over a
@@ -136,6 +138,7 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 			Status:   rec.Status,
 			Millis:   rec.Millis,
 			Cold:     rec.Cold,
+			RID:      rec.RID,
 		})
 	}
 	writeJSON(w, out)

@@ -15,7 +15,7 @@
     toggleDumps,
     buildDumpGroups
   } from '$stores/dumps';
-  import { debugEvents } from '$stores/debugEvents';
+  import { lensEvents } from '$stores/debugEvents';
   import DumpEntry from '$components/DumpEntry.svelte';
   import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import EmptyState from '$components/EmptyState.svelte';
@@ -33,6 +33,8 @@
     siteScope?: string;
   }
   let { siteScope = '' }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
 
   // When scoped (embedded in SiteDetail), search and context filters are

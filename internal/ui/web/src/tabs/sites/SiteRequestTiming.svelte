@@ -12,6 +12,7 @@
   } from '$stores/analytics';
   import ConfirmModal from '$components/ConfirmModal.svelte';
   import Modal from '$components/Modal.svelte';
+  import RequestInspectModal from '$components/RequestInspectModal.svelte';
   import Icon from '$components/Icon.svelte';
   import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
   import { openProfiler } from '$stores/dashboard';
@@ -42,6 +43,9 @@
     debugLens.set('queries');
     goToTab('sites', `${site.domain}/dumps`);
   }
+
+  // The recent request whose lenses are open, by the id it was logged with.
+  let inspecting = $state<RecentRequest | null>(null);
 
   let range = $state<TimeRange>('1h');
   let data = $state<Analytics | null>(null);
@@ -485,6 +489,19 @@
               {/if}
               <span class="shrink-0 font-mono text-[11px] font-semibold {statusClass(r.status)}">{r.status}</span>
               <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-500 dark:text-gray-400' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
+              {#if r.rid && $debugCaptureEnabled}
+                <button
+                  type="button"
+                  onclick={() => (inspecting = r)}
+                  use:tooltip={m.sites_timing_inspectRequest()}
+                  aria-label={m.sites_timing_inspectRequest()}
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                >
+                  <Icon name="eye" class="w-3.5 h-3.5" />
+                </button>
+              {:else}
+                <span class="shrink-0 w-6" aria-hidden="true"></span>
+              {/if}
               {@render removeBtn(() => askRemoveRequest(r))}
             </div>
           {/each}
@@ -497,6 +514,8 @@
     <div class="mt-2 text-[11px] text-amber-600 dark:text-amber-400">{removeError}</div>
   {/if}
 </section>
+
+<RequestInspectModal {site} request={inspecting} onclose={() => (inspecting = null)} />
 
 <Modal open={excludesOpen} title={m.sites_timing_excluded()} onclose={() => (excludesOpen = false)}>
   <div class="px-5 py-4">

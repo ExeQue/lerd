@@ -13,7 +13,7 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { buildKindGroups, knownDebugSites, debugEvents } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, lensEvents } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
@@ -30,6 +30,8 @@
     siteScope?: string;
   }
   let { kind, siteScope = '' }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(

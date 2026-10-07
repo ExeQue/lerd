@@ -318,3 +318,20 @@ func TestStorePruneDropsOldRows(t *testing.T) {
 		t.Errorf("remaining samples = %d, want 4", a.Samples)
 	}
 }
+
+// A recent request keeps the id it was logged with, so the dashboard can open
+// what debug capture recorded for it.
+func TestStoreRecentKeepsTheRequestID(t *testing.T) {
+	s := tempStore(t)
+	rec := RecordFrom(AccessRecord{Host: "app.test", Status: 200, RequestTime: 0.02, Method: "GET", URI: "/a", RID: "19a2b3c4d5e6f7a1"}, "app", base)
+	if err := s.Insert([]Record{rec}); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	recent, err := s.Recent("app", 1)
+	if err != nil || len(recent) != 1 {
+		t.Fatalf("Recent = %v, %v", recent, err)
+	}
+	if recent[0].RID != "19a2b3c4d5e6f7a1" {
+		t.Errorf("rid = %q", recent[0].RID)
+	}
+}

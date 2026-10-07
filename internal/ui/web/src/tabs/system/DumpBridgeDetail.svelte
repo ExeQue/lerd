@@ -10,7 +10,8 @@
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
-  import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
+  import { status as dumpsStatusValue, refreshStatus } from '$stores/dumps';
+  import DebugSettings from './DebugSettings.svelte';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
   import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
   import { sites } from '$stores/sites';
@@ -25,7 +26,15 @@
   const laravelOnly: DebugLens[] = ['cache'];
   const counts = $derived(countKinds($debugEvents));
 
-  const tabs = $derived(debugLensTabs(counts, anyLaravel));
+  // Settings sits after the lenses, held here so the site Debug tab, which
+  // shares the remembered lens, never lands on it.
+  let settingsOpen = $state(false);
+  const tabs = $derived([...debugLensTabs(counts, anyLaravel), { id: 'settings', label: m.common_settings(), group: 'settings' }]);
+  const active = $derived(settingsOpen ? 'settings' : $debugLens);
+  function pick(id: string) {
+    settingsOpen = id === 'settings';
+    if (!settingsOpen) debugLens.set(id as DebugLens);
+  }
 
   $effect(() => {
     if (!anyLaravel && laravelOnly.includes($debugLens)) debugLens.set('queries');
@@ -41,18 +50,6 @@
       await refreshStatus();
     } finally {
       toggling = false;
-    }
-  }
-
-  let switchingPassthrough = $state(false);
-  async function flipPassthrough() {
-    if (switchingPassthrough) return;
-    switchingPassthrough = true;
-    try {
-      await togglePassthrough(!$dumpsStatusValue?.passthrough);
-      await refreshStatus();
-    } finally {
-      switchingPassthrough = false;
     }
   }
 
@@ -84,8 +81,12 @@
   {#if !$debugCaptureEnabled}
     <DebugDisabled />
   {:else}
-    <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
-    {#if $debugLens === 'browser'}
+    <DetailTabs {tabs} {active} onchange={pick} />
+    {#if settingsOpen}
+    <div class="flex-1 min-h-0 overflow-y-auto">
+      <DebugSettings />
+    </div>
+    {:else if $debugLens === 'browser'}
     <div class="flex-1 min-h-0 overflow-hidden">
       <BrowserLens />
     </div>
@@ -100,23 +101,6 @@
           {/if}
         {/if}
       </p>
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="inline-flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            class="rounded-sm border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card text-lerd-red focus:ring-lerd-red"
-            checked={Boolean($dumpsStatusValue?.passthrough)}
-            disabled={switchingPassthrough}
-            onchange={flipPassthrough}
-          />
-          <span>{m.dumps_bridge_passthrough()}</span>
-        </label>
-        {#if switchingPassthrough}
-          <span class="text-[11px] text-amber-600 dark:text-amber-400">{m.dumps_bridge_passthroughRestarting()}</span>
-        {:else}
-          <span class="text-[11px] text-gray-500 dark:text-gray-400">{m.dumps_bridge_passthroughHint()}</span>
-        {/if}
-      </div>
     </div>
     <div class="flex-1 min-h-0 overflow-hidden">
       <DumpsTab />
