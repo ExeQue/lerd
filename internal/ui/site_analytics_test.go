@@ -58,3 +58,13 @@ func TestRecentLimit(t *testing.T) {
 		}
 	}
 }
+
+// At the 500 cap there is no further page to ask for, so it never says there is.
+func TestRecentPageStopsAtTheCap(t *testing.T) {
+	if pageHasMore(501, 500) {
+		t.Fatal("a capped page must not offer more")
+	}
+	if !pageHasMore(21, 20) || pageHasMore(20, 20) {
+		t.Fatal("below the cap, one row past the page means more")
+	}
+}

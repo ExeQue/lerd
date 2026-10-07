@@ -3,12 +3,9 @@ import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$sto
 
 export type ProfilePhase = 'arming' | 'waiting';
 
-// profileRoute arms the profiler, opens the route, and reports whether SPX
-// caught it. Each step waits for the one before it: arming only returns once
-// nginx serves the profiling config, so the request cannot be answered by the
-// configuration with no profiler attached, and the capture count only rises
-// once the report is on disk. A profiler this armed is put back after, rather
-// than leaving every FPM site profiled.
+// profileRoute arms the profiler, opens the route and reports whether SPX caught
+// it. Arming returns once nginx serves the new config, so the request cannot miss
+// the profiler; a profiler this armed is turned back off rather than left on.
 export async function profileRoute(host: string, route: string, url: string, onPhase: (p: ProfilePhase) => void): Promise<boolean> {
   const armedHere = !get(profilerEnabled);
   try {

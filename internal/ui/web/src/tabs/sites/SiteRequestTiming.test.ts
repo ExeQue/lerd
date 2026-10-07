@@ -122,6 +122,30 @@ describe('SiteRequestTiming recent paging', () => {
   });
 });
 
+// A slower read of a smaller page must not land on top of a bigger one asked after it.
+describe('SiteRequestTiming recent paging out of order', () => {
+  it('keeps the newest page when an older read finishes last', async () => {
+    const row = (uri: string) => ({ at_millis: 1783501663287, method: 'GET', route: 'GET ' + uri, uri, status: 200, millis: 5, cold: false });
+    let finishOlder: (a: Analytics) => void = () => {};
+    const older = new Promise<Analytics>((r) => (finishOlder = r));
+    loadSiteAnalytics.mockImplementation(((_d: string, _r: string, _b: string, recent = 20) => {
+      if (recent === 40) return older;
+      return Promise.resolve({ ...analytics, recent: [row(recent === 60 ? '/newest' : '/first')], recent_more: true } as Analytics);
+    }) as unknown as () => Promise<Analytics>);
+    const { findByText, getByRole, findByRole, queryByText } = render(SiteRequestTiming, { props: { site: { domain: 'whitewaters', can_profile: true } } });
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_showMore() }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_showMore() }));
+    await findByText('/newest');
+    finishOlder({ ...analytics, recent: [row('/older')], recent_more: true } as Analytics);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(queryByText('/older')).toBeNull();
+    loadSiteAnalytics.mockImplementation(async () => analytics);
+  });
+});
+
 // A route's time bar opens the slowest request recorded for it.
 describe('SiteRequestTiming slowest request', () => {
   it('opens the route slowest request from its time bar', async () => {

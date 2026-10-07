@@ -34,10 +34,6 @@
   // profiling a route has to target that, not the parent site.
   let targetDomain = $derived(activeWorktreeDomain(site, activeWorktreeBranch));
 
-  // Inspect a route's queries in the Debug tab's Queries lens, the one place that
-  // renders captured queries. Seed the lens filter with the route's path prefix
-  // (up to the first :id/:slug placeholder) so it scopes to that route, then
-  // switch the lens on and navigate to the Debug tab.
   // The Debug tab reads a search shaped like "GET /path" as that whole route.
   function inspectRoute(route: string) {
     debugSearch.set(route);
@@ -63,12 +59,14 @@
     const d = site.domain;
     const b = activeWorktreeBranch;
     const rg = range;
+    const lim = recentLimit;
+    const stale = () => d !== site.domain || b !== activeWorktreeBranch || rg !== range || lim !== recentLimit;
     try {
-      const a = await loadSiteAnalytics(d, rg, b, recentLimit);
-      if (d !== site.domain || b !== activeWorktreeBranch || rg !== range) return;
+      const a = await loadSiteAnalytics(d, rg, b, lim);
+      if (stale()) return;
       data = a;
     } catch {
-      if (d !== site.domain || b !== activeWorktreeBranch || rg !== range) return;
+      if (stale()) return;
       data = null;
     }
   }

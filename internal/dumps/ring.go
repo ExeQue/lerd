@@ -108,14 +108,16 @@ func (r *Ring) Clear() {
 // Remove drops every entry drop matches, keeping the rest in order and freeing
 // their slots for new events.
 func (r *Ring) Remove(drop func(Event) bool) {
-	kept := make([]Event, 0, r.Len())
-	for _, e := range r.Snapshot() {
+	// One lock across the read and the rewrite, or an event appended between
+	// them would be overwritten by the older copy.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := make([]Event, 0, r.size)
+	for _, e := range r.snapshot() {
 		if !drop(e) {
 			kept = append(kept, e)
 		}
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	clear(r.buf)
 	copy(r.buf, kept)
 	r.size = len(kept)

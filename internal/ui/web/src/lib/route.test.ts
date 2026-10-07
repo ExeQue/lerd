@@ -42,6 +42,12 @@ describe('routeOf', () => {
     const ev = (request?: string) => ({ ctx: { type: 'fpm', request } }) as unknown as DumpEvent;
     expect(routeOf(ev('GET /users/5?tab=1'))).toBe('GET /users/:id');
     expect(routeOf(ev(undefined))).toBe('');
-    expect(routeOf(ev('https://shop.test/'))).toBe('');
+  });
+});
+
+describe('routeOf a browser event', () => {
+  it('reads the page it happened on as a GET of that path', () => {
+    const ev = { ctx: { type: 'browser', request: 'https://shop.test/users/5?tab=1' } } as unknown as DumpEvent;
+    expect(routeOf(ev)).toBe('GET /users/:id');
   });
 });

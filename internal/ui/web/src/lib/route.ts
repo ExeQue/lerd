@@ -30,9 +30,17 @@ export function routeQuery(q: string): string {
   return normalizeRoute(m[1], m[2]);
 }
 
-// routeOf is the route a web request event ran under, from its "METHOD /uri"
-// context, or "" for a CLI run or a browser event.
+// routeOf is the route an event ran under: a web request's "METHOD /uri"
+// context, a browser event's page as a GET of its path, or "" for a CLI run.
 export function routeOf(ev: DumpEvent): string {
-  const m = /^([A-Z]+) (\/\S*)$/.exec(ev.ctx.request ?? '');
-  return m ? normalizeRoute(m[1], m[2]) : '';
+  const req = ev.ctx.request ?? '';
+  const m = /^([A-Z]+) (\/\S*)$/.exec(req);
+  if (m) return normalizeRoute(m[1], m[2]);
+  if (ev.ctx.type !== 'browser') return '';
+  try {
+    const u = new URL(req);
+    return normalizeRoute('GET', u.pathname + u.search);
+  } catch {
+    return '';
+  }
 }

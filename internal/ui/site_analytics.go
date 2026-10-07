@@ -132,8 +132,8 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 	// One past the page says whether there is more without counting the rest.
 	limit := recentLimit(r.URL.Query().Get("recent"))
 	recent, _ := store.Recent(key, limit+1)
-	more := len(recent) > limit
-	if more {
+	more := pageHasMore(len(recent), limit)
+	if len(recent) > limit {
 		recent = recent[:limit]
 	}
 	excluded, _ := store.ExcludedRoutes(key)
@@ -173,14 +173,23 @@ func linkSlowest(routes []reqstats.RouteStat, captured map[string]bool, profiles
 	}
 }
 
+// recentLimitCap bounds one page of recent requests, so a single read stays cheap.
+const recentLimitCap = 500
+
 // recentLimit is how many recent requests a page asks for: 20 unless it says,
-// and never more than 500.
+// and never more than the cap.
 func recentLimit(q string) int {
 	n, err := strconv.Atoi(q)
 	if err != nil || n <= 0 {
 		return 20
 	}
-	return min(n, 500)
+	return min(n, recentLimitCap)
+}
+
+// pageHasMore reports whether a page fetched one row past its limit can offer
+// another, which it cannot once it is at the cap.
+func pageHasMore(fetched, limit int) bool {
+	return fetched > limit && limit < recentLimitCap
 }
 
 // recentRows renders the recent-requests list. A row keeps its request id only

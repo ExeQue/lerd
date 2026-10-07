@@ -283,3 +283,26 @@ func TestServer_ForgetRequestsDropsTheirEventsOnly(t *testing.T) {
 		t.Fatalf("left = %v", got)
 	}
 }
+
+// Remove filters and rewrites under one lock, so an event appended while it runs
+// is never overwritten by an older copy of the buffer.
+func TestRing_RemoveKeepsEventsAppendedMeanwhile(t *testing.T) {
+	r := NewRing(10000)
+	for i := 0; i < 2000; i++ {
+		r.Append(mkEvent(fmt.Sprintf("old%d", i)))
+	}
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 500; i++ {
+			r.Append(mkEvent(fmt.Sprintf("new%d", i)))
+		}
+		close(done)
+	}()
+	for i := 0; i < 50; i++ {
+		r.Remove(func(e Event) bool { return e.ID == "never" })
+	}
+	<-done
+	if got := r.Len(); got != 2500 {
+		t.Fatalf("len = %d, want 2500: events appended during Remove were lost", got)
+	}
+}
