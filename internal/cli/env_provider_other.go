@@ -41,6 +41,11 @@ func RestoreProvidedEnv() {
 		if err := refreshProvidedEnv(s, false); err != nil {
 			feedback.Warn("%s: %v", s.Name, err)
 		}
+		// An unlink during the provider run dropped the file before we wrote
+		// it; teardown updates the registry first, so this catches it.
+		if cur, err := config.FindSite(s.Name); err != nil || cur.Ignored {
+			dropProvidedEnv(s.Name)
+		}
 	}
 }
 

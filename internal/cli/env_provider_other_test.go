@@ -153,3 +153,22 @@ func TestRestoreProvidedEnv_RefillsActiveSitesOnly(t *testing.T) {
 		t.Errorf("a paused site's provider must not run: %v", err)
 	}
 }
+
+// An unlink while the provider runs drops the file before the provider's output
+// lands, so the restore must not leave the removed site's secrets behind.
+func TestRestoreProvidedEnv_SiteRemovedDuringProviderRun(t *testing.T) {
+	site := providerSite(t, "")
+	provider := "rm -f '" + config.SitesFile() + "'; printf 'SECRET=x\\n'"
+	if err := config.SaveProjectConfig(site.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.ApproveSiteCommand(site.Name, provider); err != nil {
+		t.Fatal(err)
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); !os.IsNotExist(err) {
+		t.Errorf("a site removed mid-run kept its provided env: %v", err)
+	}
+}
