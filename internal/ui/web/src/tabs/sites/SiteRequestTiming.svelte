@@ -489,7 +489,7 @@
               {/if}
               <span class="shrink-0 font-mono text-[11px] font-semibold {statusClass(r.status)}">{r.status}</span>
               <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-500 dark:text-gray-400' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
-              {#if r.rid && $debugCaptureEnabled}
+              {#if r.rid}
                 <button
                   type="button"
                   onclick={() => (inspecting = r)}

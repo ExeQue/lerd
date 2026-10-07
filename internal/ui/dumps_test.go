@@ -363,3 +363,31 @@ func TestHandleDumpsBuffer_ResizesTheRingLive(t *testing.T) {
 		t.Errorf("config buffer = %d", cfg.DumpsBuffer())
 	}
 }
+
+// A reconnect replays every event it missed, however many, so a tab that lost
+// its connection under a burst does not skip any of them.
+func TestHandleDumpsStream_ReconnectReplaysEverythingMissed(t *testing.T) {
+	srv := withDumpsServer(t)
+	for i := 0; i < streamReplayLimit+10; i++ {
+		srv.Push(dumps.Event{V: 1, ID: fmt.Sprintf("e%05d", i), Kind: "dump"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/api/dumps/stream", nil).WithContext(ctx)
+	req.Header.Set("Last-Event-ID", "e00004")
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleDumpsStream(rec, req)
+	}()
+	want := streamReplayLimit + 5
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && bytes.Count(rec.bodyBytes(), []byte("data:")) < want {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if n := strings.Count(rec.bodyString(), "data:"); n != want {
+		t.Fatalf("replayed %d events after a reconnect, want %d", n, want)
+	}
+}

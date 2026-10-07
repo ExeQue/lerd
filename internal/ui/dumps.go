@@ -186,8 +186,11 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 	}
 	filt.SinceID = since
 	// The ring keeps far more than a tab needs to open on; a request's
-	// inspector reads the rest from the server, so the replay stays this size.
-	filt.Limit = streamReplayLimit
+	// inspector reads the rest from the server, so the first replay stays this
+	// size. A reconnect replays everything it missed.
+	if since == "" {
+		filt.Limit = streamReplayLimit
+	}
 	for _, ev := range srv.Filter(filt) {
 		writeSSEEvent(w, flusher, ev)
 	}

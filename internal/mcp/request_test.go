@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 const requestEventsBody = `[
@@ -35,11 +36,12 @@ func TestRequestTool_LensesCountsEachLens(t *testing.T) {
 func TestRequestTool_LensPagesItsRows(t *testing.T) {
 	path := stubRoundTrip(t, requestEventsBody)
 	got, _ := execRequestTool(map[string]any{"action": "lens", "rid": "r1", "lens": "queries", "offset": 1, "limit": 1})
-	if !strings.Contains(*path, "kind=query") || !strings.Contains(*path, "rid=r1") {
+	if *path != "/api/dumps?rid=r1" {
 		t.Errorf("path = %q", *path)
 	}
 	text := toolText(got)
-	if !strings.Contains(text, `"total":4`) || !strings.Contains(text, `"n":2`) || !strings.Contains(text, `"offset_ms":10`) {
+	// The second query ran 20 ms after the request's first event, a page view.
+	if !strings.Contains(text, `"total":2`) || !strings.Contains(text, `"n":2`) || !strings.Contains(text, `"offset_ms":20`) {
 		t.Errorf("page = %s", text)
 	}
 	if strings.Contains(text, "trace") || strings.Contains(text, `"n":3`) {
@@ -54,5 +56,22 @@ func TestRequestTool_NeedsARidAndALens(t *testing.T) {
 	}
 	if got, _ := execRequestTool(map[string]any{"action": "lens", "rid": "r1", "lens": "nope"}); !strings.Contains(toolText(got), "lens is required") {
 		t.Errorf("unknown lens = %s", toolText(got))
+	}
+}
+
+// The list holds the last hour's requests only, newest first, and a limit
+// below one still returns a row rather than panicking.
+func TestRecentInLastHour(t *testing.T) {
+	now := time.UnixMilli(10_000_000)
+	rows := []map[string]any{
+		{"at_millis": float64(now.UnixMilli() - 1000)},
+		{"at_millis": float64(now.UnixMilli() - 2000)},
+		{"at_millis": float64(now.Add(-2 * time.Hour).UnixMilli())},
+	}
+	if got := recentInLastHour(rows, now, 20); len(got) != 2 {
+		t.Errorf("last hour = %d rows, want 2", len(got))
+	}
+	if got := recentInLastHour(rows, now, 1); len(got) != 1 {
+		t.Errorf("limit 1 = %d rows", len(got))
 	}
 }

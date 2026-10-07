@@ -2,14 +2,9 @@ package dumps
 
 import "sync"
 
-// DefaultCapacity is the maximum number of events the ring keeps before it
-// overwrites the oldest entry. A single N+1 request can emit well over a
-// thousand query events, so the old 500-line cap could not even retain one
-// request's worth for analyze_queries to read; sized up so a fresh capture of
-// one pathological request survives long enough to be analyzed. An event-heavy
-// request, a view per row or a query per item, still pushed the requests before
-// it out of 3000 within seconds. The size is configurable (dumps.buffer); this
-// is the default, matching config.DefaultDumpsBuffer.
+// DefaultCapacity is how many events the ring keeps when dumps.buffer is unset,
+// matching config.DefaultDumpsBuffer. An event-heavy request emits thousands, so
+// 3000 let one push the requests before it out within seconds.
 const DefaultCapacity = 5000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.

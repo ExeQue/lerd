@@ -49,11 +49,13 @@
   let picked = $state('');
   const scope = writable('');
   $effect(() => scope.set(rid || picked));
-  // A pinned request may predate what the stream replayed; the server's ring
-  // still holds it.
+  // A pinned or picked request may predate what the stream replayed; the
+  // server's ring still holds it.
   const fetched = writable<DumpEvent[]>([]);
-  onMount(() => {
-    if (rid) apiJson<DumpEvent[]>(`/api/dumps?${new URLSearchParams({ rid })}`).then(fetched.set, () => {});
+  $effect(() => {
+    const want = rid || picked;
+    fetched.set([]);
+    if (want) apiJson<DumpEvent[]>(`/api/dumps?${new URLSearchParams({ rid: want })}`).then((evs) => (want === (rid || picked) ? fetched.set(evs) : undefined), () => {});
   });
   const events = scopeLensEvents(scope, fetched);
   const choices = $derived(rid ? [] : requestChoices($debugEvents, siteName));
@@ -127,7 +129,7 @@
 {/snippet}
 
 <div class="flex flex-col overflow-hidden {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg' : 'h-full'}">
-  {#if !$debugCaptureEnabled}
+  {#if !$debugCaptureEnabled && !rid}
     <DebugDisabled />
   {:else if !phpLenses}
     <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle actions={fullscreenAction} />

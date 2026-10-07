@@ -98,8 +98,11 @@ export function condense(rows: WaterfallRow[]): WaterfallRow[] {
   for (const r of rows) {
     const last = out[out.length - 1];
     if (last && last.layer === r.layer && r.layer !== 'request' && r.layer !== 'error') {
-      const items = last.items ?? [last];
-      out[out.length - 1] = { label: '', layer: r.layer, start: Math.min(last.start, r.start), end: Math.max(last.end, r.end), note: '', items: [...items, r] };
+      if (!last.items) out[out.length - 1] = { label: '', layer: r.layer, start: last.start, end: last.end, note: '', items: [last] };
+      const fold = out[out.length - 1];
+      fold.items!.push(r);
+      fold.start = Math.min(fold.start, r.start);
+      fold.end = Math.max(fold.end, r.end);
       continue;
     }
     out.push(r);

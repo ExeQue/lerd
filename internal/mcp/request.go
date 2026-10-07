@@ -79,11 +79,13 @@ func execRequestTool(args map[string]any) (any, *rpcError) {
 		if kind == "" {
 			return toolErr("lens is required; lenses lists what the request has"), nil
 		}
-		evs, errOut := requestEvents(strArg(args, "rid"), kind)
+		// Every lens reads offsets from the request's first event, so the whole
+		// request is read and the lens taken from it.
+		evs, errOut := requestEvents(strArg(args, "rid"), "")
 		if errOut != nil {
 			return errOut, nil
 		}
-		return jsonOK(requestLensPage(evs, intArg(args, "offset", 0), intArg(args, "limit", 50))), nil
+		return jsonOK(requestLensPage(evs, kind, intArg(args, "offset", 0), intArg(args, "limit", 50))), nil
 	}
 	return toolErr("unknown action for tool \"request\""), nil
 }
@@ -95,7 +97,7 @@ func execRequestList(args map[string]any) (any, *rpcError) {
 	if errOut != nil {
 		return errOut, nil
 	}
-	path := queryPath("/api/sites/"+url.PathEscape(site.PrimaryDomain())+"/analytics", [][2]string{{"range", "1h"}, {"branch", strArg(args, "branch")}})
+	path := queryPath("/api/sites/"+url.PathEscape(site.PrimaryDomain())+"/analytics", [][2]string{{"range", "1h"}, {"branch", branchFromArgs(args, site)}})
 	body, status, err := uiGET(path)
 	if err != nil {
 		return toolErr("lerd-ui not reachable: " + err.Error()), nil
@@ -107,9 +109,7 @@ func execRequestList(args map[string]any) (any, *rpcError) {
 		Recent []map[string]any `json:"recent"`
 	}
 	_ = json.Unmarshal(body, &a)
-	if limit := intArg(args, "limit", 20); len(a.Recent) > limit {
-		a.Recent = a.Recent[:limit]
-	}
+	a.Recent = recentInLastHour(a.Recent, time.Now(), max(intArg(args, "limit", 20), 1))
 	out := map[string]any{"site": site.Name, "requests": a.Recent}
 	if len(a.Recent) == 0 {
 		out["hint"] = "No requests in the last hour. Load a page on the site and list again."
@@ -117,6 +117,20 @@ func execRequestList(args map[string]any) (any, *rpcError) {
 		out["hint"] = "Requests without a rid ran while debug capture was off; turn it on with diag dumps_toggle."
 	}
 	return jsonOK(out), nil
+}
+
+// recentInLastHour keeps the newest recent rows from the last hour, at most
+// limit of them; the analytics range bounds its figures, not this list.
+func recentInLastHour(rows []map[string]any, now time.Time, limit int) []map[string]any {
+	since := float64(now.Add(-time.Hour).UnixMilli())
+	out := make([]map[string]any, 0, min(len(rows), limit))
+	for _, r := range rows {
+		if at, _ := r["at_millis"].(float64); at < since || len(out) == limit {
+			break
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func requestEvents(rid, kind string) ([]reqEvent, map[string]any) {
@@ -162,11 +176,17 @@ func requestLensCounts(evs []reqEvent) map[string]any {
 }
 
 // requestLensPage is one page of a lens's rows, oldest first, each placed on
-// the request's clock and stripped of its stack trace.
-func requestLensPage(evs []reqEvent, offset, limit int) map[string]any {
+// the clock of the request's first event and stripped of its stack trace.
+func requestLensPage(all []reqEvent, kind string, offset, limit int) map[string]any {
 	var start time.Time
-	if len(evs) > 0 {
-		start, _ = time.Parse(time.RFC3339Nano, evs[0].TS)
+	if len(all) > 0 {
+		start, _ = time.Parse(time.RFC3339Nano, all[0].TS)
+	}
+	var evs []reqEvent
+	for _, e := range all {
+		if e.Kind == kind {
+			evs = append(evs, e)
+		}
 	}
 	total := len(evs)
 	evs = evs[min(max(offset, 0), total):]
