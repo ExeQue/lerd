@@ -56,6 +56,8 @@ lerd keeps the last 5,000 events in memory by default, every query, view, log li
 
 ![The Debug window's Settings tab](/assets/screenshots/debug-settings.png)
 
+![A request id clicked into the Debug tab's search](/assets/screenshots/request-link-search.png)
+
 ## Laravel adapter (richer capture)
 
 For Laravel apps, the extension loads a small in-app adapter at `Application::boot` (observed at the engine level) that listens to `QueryExecuted`. While it's active the engine-level PDO capture stands down, so Laravel queries come through with data the raw PDO hook can't see:
