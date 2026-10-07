@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -42,8 +43,12 @@ func RestoreProvidedEnv() {
 			feedback.Warn("%s: %v", s.Name, err)
 		}
 		// An unlink during the provider run dropped the file before we wrote
-		// it; teardown updates the registry first, so this catches it.
-		if cur, err := config.FindSite(s.Name); err != nil || cur.Ignored {
+		// it; teardown updates the registry first, so this catches it. A
+		// registry that cannot be read proves nothing, so the file stays.
+		cur, err := config.LoadSites()
+		if err == nil && !slices.ContainsFunc(cur.Sites, func(c config.Site) bool {
+			return c.Name == s.Name && !c.Ignored
+		}) {
 			dropProvidedEnv(s.Name)
 		}
 	}

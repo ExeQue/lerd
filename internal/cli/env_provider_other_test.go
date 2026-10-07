@@ -172,3 +172,22 @@ func TestRestoreProvidedEnv_SiteRemovedDuringProviderRun(t *testing.T) {
 		t.Errorf("a site removed mid-run kept its provided env: %v", err)
 	}
 }
+
+// A registry that cannot be read says nothing about the site, so the file the
+// provider just wrote must not be taken for an unlinked site's and dropped.
+func TestRestoreProvidedEnv_UnreadableRegistryKeepsFile(t *testing.T) {
+	site := providerSite(t, "")
+	provider := "printf 'sites: [' > '" + config.SitesFile() + "'; printf 'SECRET=x\\n'"
+	if err := config.SaveProjectConfig(site.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.ApproveSiteCommand(site.Name, provider); err != nil {
+		t.Fatal(err)
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); err != nil {
+		t.Errorf("an unreadable registry dropped the restored file: %v", err)
+	}
+}
