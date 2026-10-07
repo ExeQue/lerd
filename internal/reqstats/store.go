@@ -316,7 +316,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 // percentile and local request volumes are small.
 func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, error) {
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests
+		`SELECT at_ms, route, method, status, ms, uri, cold, rid FROM requests
 		 WHERE site = ? AND at_ms >= ? AND at_ms < ? ORDER BY at_ms ASC`,
 		site, since.UnixMilli(), until.UnixMilli())
 	if err != nil {
@@ -331,16 +331,17 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		method, example string
 		warm            []float64
 		total           int
+		slowest         *Sample
 	}
 	routes := map[string]*agg{}
 	minutes := map[int64]int{}
 
 	for rows.Next() {
 		var atMs int64
-		var route, method, uri string
+		var route, method, uri, rid string
 		var status, cold int
 		var ms float64
-		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold); err != nil {
+		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold, &rid); err != nil {
 			return Analytics{}, err
 		}
 		// New ones aren't recorded; filtering on read also drops any already stored
@@ -369,6 +370,9 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		warm = append(warm, ms)
 		a.Distribution[bucketIndex(ms)].Count++
 		r.warm = append(r.warm, ms)
+		if r.slowest == nil || ms > r.slowest.Millis {
+			r.slowest = &Sample{AtMillis: atMs, URI: uri, Status: status, Millis: ms, RID: rid}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return Analytics{}, err
@@ -392,6 +396,7 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 			P95Millis:       round1(percentile(r.warm, 95)),
 			RecentP95Millis: round1(percentile(recent, 95)),
 			Samples:         r.total,
+			Slowest:         r.slowest,
 		})
 	}
 	sort.Slice(a.Routes, func(i, j int) bool {

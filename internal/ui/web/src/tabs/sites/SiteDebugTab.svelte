@@ -7,15 +7,17 @@
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
   import RequestTimeline from '$components/RequestTimeline.svelte';
-  import Dropdown from '$components/Dropdown.svelte';
+  import ProfilePrompt from '$components/ProfilePrompt.svelte';
+  import { profileKeyFor } from '$stores/profiler';
   import { writable } from 'svelte/store';
   import { apiJson } from '$lib/api';
   import type { DumpEvent } from '$lib/dumpsStream';
   import { buildWaterfall, type ServedRequest } from '$lib/requestWaterfall';
-  import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
+  import { routeQuery } from '$lib/route';
+  import { debugLens, debugLensTabs, debugSearch, type DebugLens } from '$stores/debugLens';
   import { refreshStatus, startDumpsStream, stopDumpsStream } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
-  import { countKinds, debugEvents, requestChoices, scopeLensEvents } from '$stores/debugEvents';
+  import { countKinds, debugEvents, providePickRequest, scopeLensEvents } from '$stores/debugEvents';
   import Icon from '$components/Icon.svelte';
   import { modal } from '$stores/modals';
   import { tooltip } from '$lib/tooltip';
@@ -41,12 +43,21 @@
     // does; served is that request as nginx timed it, for the timeline.
     rid?: string;
     served?: ServedRequest;
+    // origin is the site's scheme and host for profiling a request's route,
+    // empty where SPX cannot run.
+    origin?: string;
+    // onleave runs before the view hands over to the Profiler, so a dialog
+    // holding it can close itself.
+    onleave?: () => void;
   }
-  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true, rid = '', served }: Props = $props();
+  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true, rid = '', served, origin = '', onleave }: Props = $props();
 
-  // Without a pinned request, a filter over the lenses picks one, all by
-  // default. A picked request gains a timeline of what it did.
-  let picked = $state('');
+  // Without a pinned request, a search that is exactly one of the site's
+  // request ids picks that request, and a picked request gains a timeline.
+  const picked = $derived.by(() => {
+    const q = $debugSearch.trim();
+    return !rid && q && $debugEvents.some((ev) => ev.ctx.rid === q && ev.ctx.site === siteName) ? q : '';
+  });
   const scope = writable('');
   $effect(() => scope.set(rid || picked));
   // A pinned or picked request may predate what the stream replayed; the
@@ -57,14 +68,27 @@
     fetched.set([]);
     if (want) apiJson<DumpEvent[]>(`/api/dumps?${new URLSearchParams({ rid: want })}`).then((evs) => (want === (rid || picked) ? fetched.set(evs) : undefined), () => {});
   });
-  const events = scopeLensEvents(scope, fetched);
-  const choices = $derived(rid ? [] : requestChoices($debugEvents, siteName));
-  $effect(() => {
-    if (picked && !choices.some((c) => c.rid === picked)) picked = '';
-  });
+  // A search shaped like "GET /path" narrows the lenses to that whole route.
+  const route = writable('');
+  $effect(() => route.set(rid ? '' : routeQuery($debugSearch)));
+  const events = scopeLensEvents(scope, fetched, route);
   let timeline = $state(Boolean(rid));
+  // A request id clicked in a lens becomes the search and opens its timeline.
+  providePickRequest((id) => {
+    debugSearch.set(id);
+    timeline = true;
+  });
   const showTimeline = $derived(timeline && Boolean(rid || picked));
   const waterfall = $derived(showTimeline ? buildWaterfall($events, rid ? served : undefined) : null);
+  // The request the timeline is about, as nginx logged it or as PHP reported it.
+  // The SPX capture lerd stamped with this request's id, if it was profiled.
+  let profileKey = $state('');
+  $effect(() => {
+    const want = rid || picked;
+    profileKey = '';
+    if (want) void profileKeyFor(want).then((k) => (want === (rid || picked) ? (profileKey = k) : undefined));
+  });
+  const requestLine = $derived(served?.label ?? $events.find((ev) => ev.ctx.type === 'fpm' && ev.ctx.request)?.ctx.request ?? '');
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
   // sites; everything else is framework-agnostic (PDO and the Symfony
@@ -75,7 +99,7 @@
 
   const tabs = $derived([
     ...(rid || picked ? [{ id: 'timeline', label: m.debug_tab_timeline(), group: 'timeline' }] : []),
-    ...debugLensTabs(counts, isLaravel)
+    ...debugLensTabs(counts, isLaravel, Boolean(rid))
   ]);
   const active = $derived(showTimeline ? 'timeline' : $debugLens);
   function pick(id: string) {
@@ -105,16 +129,6 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#snippet fullscreenAction()}
-  {#if choices.length > 0}
-    <Dropdown
-      value={picked}
-      options={[{ value: '', label: m.debug_filter_allRequests() }, ...choices.map((c) => ({ value: c.rid, label: c.label, description: new Date(c.ts).toLocaleTimeString([], { hour12: false }) }))]}
-      onchange={(v) => (picked = v)}
-      title={m.debug_filter_request()}
-      align="right"
-      minMenuWidth={260}
-    />
-  {/if}
   <!-- Full screen hides the site header, so name the site here. -->
   {#if !rid && fullscreen && domain}<span class="text-xs font-mono text-gray-600 dark:text-gray-300">{domain}</span>{/if}
   {#if !rid}<button
@@ -132,23 +146,27 @@
   {#if !$debugCaptureEnabled && !rid}
     <DebugDisabled />
   {:else if !phpLenses}
-    <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle actions={fullscreenAction} />
+    <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle actions={rid ? undefined : fullscreenAction} />
     <div class="flex-1 min-h-0 overflow-hidden">
-      <BrowserLens siteScope={siteName} />
+      <BrowserLens siteScope={siteName} pinned={Boolean(rid)} />
     </div>
   {:else}
-    <DetailTabs {tabs} {active} onchange={pick} actions={fullscreenAction} />
+    <!-- One request has no filter or full screen, so its bar carries only tabs. -->
+    <DetailTabs {tabs} {active} onchange={pick} actions={rid ? undefined : fullscreenAction} />
     <div class="flex-1 min-h-0 overflow-hidden">
       {#if waterfall}
-        <RequestTimeline {waterfall} />
+        <div class="h-full flex flex-col">
+          <div class="px-3 pt-3"><ProfilePrompt {origin} request={requestLine} {profileKey} {onleave} /></div>
+          <div class="flex-1 min-h-0"><RequestTimeline {waterfall} /></div>
+        </div>
       {:else if $debugLens === 'browser'}
-        <BrowserLens siteScope={siteName} />
+        <BrowserLens siteScope={siteName} pinned={Boolean(rid)} />
       {:else if $debugLens === 'dumps'}
-        <DumpsTab siteScope={siteName} />
+        <DumpsTab siteScope={siteName} pinned={Boolean(rid)} />
       {:else if $debugLens === 'queries'}
-        <QueriesLens siteScope={siteName} />
+        <QueriesLens siteScope={siteName} pinned={Boolean(rid)} />
       {:else}
-        <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions' | 'messages'} siteScope={siteName} />
+        <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions' | 'messages'} siteScope={siteName} pinned={Boolean(rid)} />
       {/if}
     </div>
   {/if}

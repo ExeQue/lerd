@@ -142,7 +142,7 @@ func Start(currentVersion string) error {
 	// reparented out of the client's tree, so a killed lerd-ui leaves it
 	// running and there is no pid left to recognise it by.
 	go cli.ReapOrphanNgrokContainers()
-	stopTunnelsOnShutdown()
+	cleanUpOnShutdown()
 
 	// Single coalescer for the two event sources that need to refresh the
 	// container cache and broadcast a snapshot: in-process mutations

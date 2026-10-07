@@ -59,6 +59,9 @@ func startDumpsServer() {
 		srv.SetKeepTests(cfg.IsDevtoolsTests())
 		srv.Resize(cfg.DumpsBuffer())
 	}
+	if err := srv.Load(config.DumpsBufferFile()); err != nil {
+		fmt.Printf("[WARN] restoring debug events: %v\n", err)
+	}
 	// Worker capture is always on now; an install from before that has no flag.
 	if err := podman.EnsureDevtoolsAssets(); err != nil {
 		fmt.Printf("[WARN] devtools assets: %v\n", err)

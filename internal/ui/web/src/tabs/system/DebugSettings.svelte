@@ -1,5 +1,6 @@
 <script lang="ts">
   import Dropdown from '$components/Dropdown.svelte';
+  import SettingsCard from '$components/SettingsCard.svelte';
   import { status as dumpsStatusValue, setDumpsBuffer } from '$stores/dumps';
   import { m } from '../../paraglide/messages.js';
 
@@ -27,14 +28,18 @@
   }
 </script>
 
-<div class="px-3 sm:px-5 py-4 space-y-5 text-xs text-gray-600 dark:text-gray-300 max-w-2xl">
-  {#if $dumpsStatusValue?.capacity}
-    <div class="space-y-1.5">
-      <div class="flex items-center gap-2 flex-wrap font-medium text-gray-800 dark:text-gray-100">
-        <span>{m.dumps_bridge_buffer()}</span>
-        <Dropdown value={String($dumpsStatusValue.capacity)} options={bufferOptions} onchange={resizeBuffer} minMenuWidth={240} />
-      </div>
-      <p class="text-[11px] {bufferError ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}">{bufferError || m.dumps_bridge_bufferHint()}</p>
-    </div>
-  {/if}
+<!-- Laid out like the System > Lerd settings: one card per setting, the title
+     and its control on one row and what it does underneath. -->
+<div class="p-3 @container">
+  <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-3">
+    {#if $dumpsStatusValue?.capacity}
+      <SettingsCard>
+        <div class="flex items-center justify-between gap-4 mb-2">
+          <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.dumps_bridge_buffer()}</span>
+          <Dropdown value={String($dumpsStatusValue.capacity)} options={bufferOptions} onchange={resizeBuffer} minMenuWidth={240} align="right" />
+        </div>
+        <p class="text-xs {bufferError ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}">{bufferError || m.dumps_bridge_bufferHint()}</p>
+      </SettingsCard>
+    {/if}
+  </div>
 </div>

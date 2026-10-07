@@ -1,6 +1,13 @@
 package dumps
 
-import "sync"
+import (
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sync"
+)
 
 // DefaultCapacity is how many events the ring keeps when dumps.buffer is unset,
 // matching config.DefaultDumpsBuffer. An event-heavy request emits thousands, so
@@ -113,6 +120,58 @@ func (r *Ring) Remove(drop func(Event) bool) {
 	copy(r.buf, kept)
 	r.size = len(kept)
 	r.head = len(kept) % r.cap
+}
+
+// Save writes the ring to path, so a restarted lerd-ui can pick up where this
+// one stopped. Owner-only: events carry SQL bindings and request payloads.
+func (r *Ring) Save(path string) error {
+	b, err := json.Marshal(r.Snapshot())
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// Load appends the events Save wrote to path, oldest first, so the newest that
+// fit survive a smaller ring. A missing file is an empty buffer, not an error.
+func (r *Ring) Load(path string) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var events []Event
+	if err := json.Unmarshal(b, &events); err != nil {
+		return err
+	}
+	for _, e := range events {
+		r.Append(e)
+	}
+	return nil
+}
+
+// RequestIDs is the set of requests with at least one event in the ring: the
+// ones a recent request's Inspect can open on something.
+func (r *Ring) RequestIDs() map[string]bool {
+	out := map[string]bool{}
+	for _, e := range r.Snapshot() {
+		if e.Ctx.RID != "" {
+			out[e.Ctx.RID] = true
+		}
+		if rid := e.reachedRID(); rid != "" {
+			out[rid] = true
+		}
+	}
+	return out
 }
 
 // FilterOpts narrows a Snapshot. Zero-value fields are ignored.

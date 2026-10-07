@@ -30,9 +30,9 @@ While the profiler is on, every HTTP request to every PHP-FPM site is profiled. 
 
 ## Profiling one slow route
 
-The Request timing panel on a site makes each of its slowest routes clickable. The click arms the profiler, opens the route in a new tab, and switches the dashboard to the Profiler once that request's report is on disk. Every step waits for the one before it: arming regenerates each PHP-FPM vhost and reloads nginx, and a reload drains the old workers rather than swapping the configuration in place, so a request sent an instant too early is still served with no profiler attached and nothing profiles it. If nothing is captured within twenty seconds the panel says so, rather than handing you a report list that cannot contain your request.
+The Request timing panel on a site gives each of its slowest routes a **Profile** button, also offered under a request's timeline. It arms the profiler, opens the route in a new tab, and switches the dashboard to the Profiler once that request's report is on disk. Every step waits for the one before it: arming regenerates each PHP-FPM vhost and reloads nginx, and a reload drains the old workers rather than swapping the configuration in place, so a request sent an instant too early is still served with no profiler attached and nothing profiles it. If nothing is captured within twenty seconds the panel says so, rather than handing you a report list that cannot contain your request.
 
-Only a GET route lerd has seen a real example URL for can be profiled this way, since anything else gives the click no address to open. If the profiler was off when you clicked, it is turned back off once the capture lands, so profiling one route costs you one request rather than leaving every PHP-FPM site profiled until you notice.
+Only a GET route lerd has seen a real example URL for can be profiled this way, since anything else gives the button no address to open. If the profiler was off when you clicked, it is turned back off once the capture lands, so profiling one route costs you one request rather than leaving every PHP-FPM site profiled until you notice.
 
 ## Reading flame graphs
 

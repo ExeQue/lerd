@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestChoices, requestEvents } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestEvents } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -140,22 +140,6 @@ describe('one request', () => {
     expect(ofRequest(at('3', 'query', { type: 'fpm', rid: 'r2' }), 'r1')).toBe(false);
   });
 
-  it('offers a site web requests newest first, once each', () => {
-    const choices = requestChoices(
-      [
-        at('1', 'query', { type: 'fpm', rid: 'r1', request: 'GET /a' }),
-        at('2', 'query', { type: 'cli', rid: 'w1' }),
-        at('3', 'query', { type: 'fpm', rid: 'r2', request: 'POST /b' }),
-        at('4', 'view', { type: 'fpm', rid: 'r1', request: 'GET /a' }),
-        at('5', 'query', { type: 'fpm', rid: 'r3', site: 'other' })
-      ],
-      'acme'
-    );
-    expect(choices.map((c) => [c.rid, c.label])).toEqual([
-      ['r1', 'GET /a'],
-      ['r2', 'POST /b']
-    ]);
-  });
 });
 
 describe('a pinned request', () => {
@@ -165,5 +149,15 @@ describe('a pinned request', () => {
   it('starts from what the server kept and adds what the stream brought since', () => {
     const got = requestEvents([at('2'), at('3')], 'r1', [at('1'), at('2'), at('4', true)], false);
     expect(got.map((e) => e.id)).toEqual(['1', '2', '3']);
+  });
+});
+
+describe('route scope', () => {
+  it('keeps only the route asked for, so the home page does not match every path', async () => {
+    const { lensRouteFilter } = await import('./debugEvents');
+    const q = (id: string, request: string) => ({ v: 1, id, ts: '2026-10-07T10:00:00Z', kind: 'query', ctx: { type: 'fpm', site: 'acme', request }, src: {} }) as DumpEvent;
+    const events = [q('a', 'GET /'), q('b', 'GET /users/5'), q('c', 'GET /?page=2'), q('d', 'POST /')];
+    expect(lensRouteFilter(events, 'GET /').map((e) => e.id)).toEqual(['a', 'c']);
+    expect(lensRouteFilter(events, '').map((e) => e.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });

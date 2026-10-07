@@ -335,3 +335,22 @@ func TestStoreRecentKeepsTheRequestID(t *testing.T) {
 		t.Errorf("rid = %q", recent[0].RID)
 	}
 }
+
+// A route's time bar opens its slowest warm request, so each route names it.
+func TestStoreAnalyticsNamesEachRoutesSlowestRequest(t *testing.T) {
+	s := tempStore(t)
+	recs := []Record{
+		{At: base, Site: "acme", Method: "GET", Route: "GET /users/:id", URI: "/users/1", Status: 200, Millis: 40, RID: "r1"},
+		{At: base.Add(time.Second), Site: "acme", Method: "GET", Route: "GET /users/:id", URI: "/users/2?tab=a", Status: 200, Millis: 90, RID: "r2"},
+		{At: base.Add(2 * time.Second), Site: "acme", Method: "GET", Route: "GET /users/:id", URI: "/users/3", Status: 200, Millis: 900, Cold: true, RID: "r3"},
+	}
+	seed(t, s, recs)
+	a, err := s.SiteAnalytics("acme", base.Add(-time.Minute), base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := a.Routes[0].Slowest
+	if got == nil || got.RID != "r2" || got.URI != "/users/2?tab=a" || got.Millis != 90 || got.AtMillis != base.Add(time.Second).UnixMilli() {
+		t.Fatalf("slowest = %+v, want the 90 ms warm request; a cold start is not the route being slow", got)
+	}
+}

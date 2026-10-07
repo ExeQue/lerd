@@ -132,11 +132,19 @@ func (e Event) OfRequest(rid string) bool {
 	if e.Ctx.RID == rid {
 		return true
 	}
-	if e.Kind != KindBrowser || !bytes.Contains(e.Data, []byte(rid)) {
-		return false
+	return bytes.Contains(e.Data, []byte(rid)) && e.reachedRID() == rid
+}
+
+// reachedRID is the request a browser fetch or XHR reached, or "".
+func (e Event) reachedRID() string {
+	if e.Kind != KindBrowser {
+		return ""
 	}
 	var d struct {
 		RID string `json:"rid"`
 	}
-	return json.Unmarshal(e.Data, &d) == nil && d.RID == rid
+	if json.Unmarshal(e.Data, &d) != nil {
+		return ""
+	}
+	return d.RID
 }

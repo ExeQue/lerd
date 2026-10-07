@@ -2,6 +2,8 @@ package dumps
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -214,5 +216,70 @@ func TestRing_ResizeKeepsTheNewest(t *testing.T) {
 	r.Append(mkEvent("g"))
 	if got := r.Snapshot(); !equalIDs(got, []string{"e", "f", "g"}) {
 		t.Fatalf("grown = %v", ids(got))
+	}
+}
+
+func TestRing_SaveLoadKeepsEventsAcrossARestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dumps-buffer.json")
+	r := NewRing(4)
+	for _, id := range []string{"a", "b", "c"} {
+		r.Append(mkEvent(id))
+	}
+	if err := r.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("saved file mode = %v, %v; captured SQL and payloads stay private", fi.Mode().Perm(), err)
+	}
+
+	next := NewRing(2)
+	if err := next.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(next.Snapshot()); fmt.Sprint(got) != "[b c]" {
+		t.Fatalf("loaded = %v, want the newest that fit", got)
+	}
+}
+
+func TestRing_LoadWithoutASavedFileStartsEmpty(t *testing.T) {
+	r := NewRing(4)
+	if err := r.Load(filepath.Join(t.TempDir(), "missing.json")); err != nil {
+		t.Fatal(err)
+	}
+	if r.Len() != 0 {
+		t.Fatalf("len = %d", r.Len())
+	}
+}
+
+func TestRing_RequestIDsNamesEveryRequestWithEvents(t *testing.T) {
+	r := NewRing(4)
+	q := mkEvent("a")
+	q.Ctx.RID = "r1"
+	b := Event{V: 1, ID: "b", Kind: KindBrowser, Data: []byte(`{"type":"fetch","rid":"r2"}`)}
+	r.Append(q)
+	r.Append(b)
+	r.Append(mkEvent("c"))
+	got := r.RequestIDs()
+	if len(got) != 2 || !got["r1"] || !got["r2"] {
+		t.Fatalf("request ids = %v", got)
+	}
+}
+
+func TestServer_ForgetRequestsDropsTheirEventsOnly(t *testing.T) {
+	s, err := Listen(nil, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	for _, e := range []Event{
+		{V: ProtocolVersion, ID: "a", Kind: KindQuery, Ctx: Context{RID: "r1"}},
+		{V: ProtocolVersion, ID: "b", Kind: KindBrowser, Data: []byte(`{"rid":"r1"}`)},
+		{V: ProtocolVersion, ID: "c", Kind: KindQuery, Ctx: Context{RID: "r2"}},
+	} {
+		s.Push(e)
+	}
+	s.ForgetRequests([]string{"r1"})
+	if got := ids(s.Snapshot()); fmt.Sprint(got) != "[c]" {
+		t.Fatalf("left = %v", got)
 	}
 }
