@@ -141,9 +141,9 @@ Actions: `sources`, `fetch`. Debug without opening files by hand.
 
 #### `request` — one request, through the Debug lenses
 Actions: `list`, `lenses`, `lens`.
-- `list` (site, branch, limit): last hour's requests, newest first, each with its `rid` (none: debug capture was off)
-- `lenses` (rid): the request and its event count per lens; `browser` holds its page and failed fetches that reached it
-- `lens` (rid, lens, offset, limit 50): one lens's events, oldest first, with `offset_ms` and `at`
+- `list` (site, branch, limit): last hour's requests, newest first, with `rid` (none: capture was off)
+- `lenses` (rid): per-lens counts, `sent` (requests its page sent) and `sent_by` (its page); lens `request` has headers, body, cookies
+- `lens` (rid, lens, offset, limit 50): one lens's events, oldest first, with `offset_ms`, `at`
 
 #### `worktree` — git worktrees
 Actions: `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share`.

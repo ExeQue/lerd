@@ -576,7 +576,7 @@ func diagTool() mcpTool {
 				"since":           {Type: "string", Description: "dumps_recent: time filter."},
 				"limit":           {Type: "integer", Description: "dumps_recent: max events."},
 				"preset":          {Type: "string", Description: "browser_presets: switch on/off (with enable)."},
-				"types":           {Type: "array", Items: stringItems, Description: "browser_events: error, rejection, console.error, console.warn, network, resource, event, navigation."},
+				"types":           {Type: "array", Items: stringItems, Description: "browser_events: error, rejection, console.error, console.warn, network, resource, event, navigation, request."},
 				"min_repeat":      {Type: "integer", Description: "analyze_queries/optimize_route: N+1 repeat threshold."},
 				"slow_ms":         {Type: "number", Description: "analyze_queries/optimize_route: slow-query threshold."},
 				"enable":          {Type: "boolean", Description: "*_toggle: on/off."},

@@ -116,6 +116,11 @@ namespace {
             \spx_profiler_full_report_set_custom_metadata_str('lerd-rid:'.\LERD_DEVTOOLS_RID);
         }
         unset($lerdSpxKey);
+        // How the request ended and what it carried, for its inspector's
+        // Request tab; reported after the response has gone out.
+        if (\function_exists('Lerd\\Collector\\request_end')) {
+            \register_shutdown_function('Lerd\\Collector\\request_end');
+        }
     }
 }
 

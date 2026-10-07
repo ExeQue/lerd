@@ -4,7 +4,7 @@
   window.__lerdBrowserLogs = true;
   var cfg = __LERD_CONFIG__;
   var endpoint = cfg.endpoint;
-  var queue = [], seen = {}, sent = 0, timer = null, MAX = 50;
+  var queue = [], seen = {}, sent = 0, linked = 0, timer = null, MAX = 50, MAX_LINKED = 1000;
   // One id per page view, a SPA navigation included, so the dashboard groups
   // each view's events together. The first view takes the id of the request
   // that served the page, which nginx put on this script's tag.
@@ -66,9 +66,11 @@
 
   function flush() {
     timer = null;
-    if (!queue.length) return;
-    var body = JSON.stringify(queue);
-    queue = [];
+    // lerd takes at most MAX entries per post, so a busy page posts in chunks.
+    while (queue.length) post(JSON.stringify(queue.splice(0, MAX)));
+  }
+
+  function post(body) {
     var blob = new Blob([body], { type: 'application/json' });
     if (!(navigator.sendBeacon && navigator.sendBeacon(endpoint, blob)) && origFetch) {
       origFetch.call(window, endpoint, { method: 'POST', body: body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(function () {});
@@ -77,12 +79,15 @@
 
   function report(ev) {
     // An identical report within a second is a loop, not the user doing it
-    // again, so only that is dropped; MAX still caps a page view.
-    var key = ev.type + '|' + ev.message + '|' + (ev.file || '') + ':' + (ev.line || 0);
+    // again, so only that is dropped. Linked requests have a budget of their
+    // own, so a chatty page cannot use up the one its errors need.
+    var key = ev.type + '|' + ev.message + '|' + (ev.file || '') + ':' + (ev.line || 0) + '|' + (ev.rid || '');
     var now = Date.now();
-    if (now - (seen[key] || -Infinity) < 1000 || sent >= MAX) return;
+    var isLinked = ev.type === 'request';
+    if (now - (seen[key] || -Infinity) < 1000 || (isLinked ? linked >= MAX_LINKED : sent >= MAX)) return;
     seen[key] = now;
-    sent++;
+    if (isLinked) linked++;
+    else sent++;
     ev.message = cut(ev.message, 2000);
     if (ev.stack) ev.stack = cut(ev.stack, 8000);
     ev.url = location.href;
@@ -134,47 +139,56 @@
   }
   // Status 0 means no response at all. The browser hides why (CORS, refused,
   // DNS, offline all look the same to a script), so only the facts are reported.
-  // rid names the PHP request that answered, read off its X-Lerd-Rid header.
-  function network(method, url, status, rid) {
-    if (!failed(status)) return;
+  // rid names the PHP request that answered, read off its X-Lerd-Rid header;
+  // a response that names one is reported whatever its status, so the page
+  // lists the requests it sent.
+  function network(method, url, status, rid, started, via) {
     method = String(method || 'GET').toUpperCase();
     url = String(url);
     var cross = crossOrigin(url);
+    if (rid) {
+      var ms = Math.round((now() - started) * 10) / 10;
+      report({ type: 'request', via: via, method: method, request: url, status: status, rid: rid, cross: cross, duration_ms: ms, message: status + ' ' + method + ' ' + url });
+    }
+    if (!failed(status)) return;
     report({
       type: 'network', method: method, request: url, status: status, cross: cross, rid: rid || undefined,
       message: (status === 0 ? 'no response ' + (cross ? '(cross-origin) ' : '') : status + ' ') + method + ' ' + url
     });
   }
 
+  function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
+
   var origFetch = window.fetch;
-  if (classes.length && origFetch) {
+  if (origFetch) {
     window.fetch = function (input, init) {
       var method = (init && init.method) || (input && input.method) || 'GET';
       var url = typeof input === 'string' ? input : (input && input.url) || String(input);
+      var started = now();
       return origFetch.apply(this, arguments).then(function (res) {
-        network(method, url, res.status, res.headers && res.headers.get('X-Lerd-Rid'));
+        network(method, url, res.status, res.headers && res.headers.get('X-Lerd-Rid'), started, 'fetch');
         return res;
       }, function (err) {
-        if (!err || err.name !== 'AbortError') network(method, url, 0);
+        if (!err || err.name !== 'AbortError') network(method, url, 0, '', started, 'fetch');
         throw err;
       });
     };
   }
-  if (classes.length && window.XMLHttpRequest) {
+  if (window.XMLHttpRequest) {
     var open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function (method, url) {
       this.__lerd = [method, url];
       return open.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function () {
-      var xhr = this, aborted = false;
+      var xhr = this, aborted = false, started = now();
       if (xhr.__lerd) {
         xhr.addEventListener('abort', function () { aborted = true; });
         xhr.addEventListener('loadend', function () {
           if (aborted) return;
           var rid = '';
           try { rid = xhr.getResponseHeader('X-Lerd-Rid'); } catch (e) {}
-          network(xhr.__lerd[0], xhr.__lerd[1], xhr.status, rid);
+          network(xhr.__lerd[0], xhr.__lerd[1], xhr.status, rid, started, 'xhr');
         });
       }
       return send.apply(this, arguments);
@@ -218,6 +232,7 @@
     page = how === 'load' && docRid ? docRid : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     seen = {};
     sent = 0;
+    linked = 0;
     if (cfg.navigation) report({ type: 'navigation', nav: how, message: location.href });
   }
   ['pushState', 'replaceState'].forEach(function (name) {

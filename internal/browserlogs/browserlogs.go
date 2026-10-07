@@ -172,19 +172,21 @@ type Report struct {
 	Name    string `json:"name,omitempty"`
 	Label   string `json:"label,omitempty"`
 	Cross   bool   `json:"cross,omitempty"`
-	// RID is the PHP request a failed fetch or XHR reached, read off its
-	// X-Lerd-Rid response header.
-	RID  string `json:"rid,omitempty"`
-	URL  string `json:"url,omitempty"`
-	Page string `json:"page,omitempty"`
-	UA   string `json:"ua,omitempty"`
-	At   string `json:"at,omitempty"`
+	// RID is the PHP request a fetch or XHR reached, read off its X-Lerd-Rid
+	// response header; Via says which of the two sent it.
+	RID      string  `json:"rid,omitempty"`
+	Via      string  `json:"via,omitempty"`
+	Duration float64 `json:"duration_ms,omitempty"`
+	URL      string  `json:"url,omitempty"`
+	Page     string  `json:"page,omitempty"`
+	UA       string  `json:"ua,omitempty"`
+	At       string  `json:"at,omitempty"`
 }
 
-var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true}
+var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true, "request": true}
 
-// MaxReports caps how many entries one post may carry; the script itself
-// stops after 50 per page.
+// MaxReports caps how many entries one post may carry; the script posts a
+// busy page's entries in chunks of this size.
 const MaxReports = 50
 
 // Events turns a posted batch into browser events for the site nginx named.
@@ -275,7 +277,7 @@ func PageSettings(site config.Site) config.BrowserLogsSettings {
 
 // EventTypes are the types a browser event is filtered and counted by, with
 // console messages split by level the way the dashboard filters them.
-var EventTypes = []string{"error", "rejection", "console.error", "console.warn", "network", "resource", "event", "navigation"}
+var EventTypes = []string{"error", "rejection", "console.error", "console.warn", "network", "resource", "event", "navigation", "request"}
 
 // EventType returns a browser event's type in EventTypes terms.
 func EventType(r Report) string {
@@ -330,6 +332,11 @@ func Summarize(events []dumps.Event, types []string) Summary {
 			continue
 		}
 		typ := EventType(r)
+		// The requests a page sent are listed only when asked for: a busy page
+		// sends hundreds, and they say what was called, not what went wrong.
+		if len(types) == 0 && typ == "request" {
+			continue
+		}
 		if len(types) > 0 && !slices.Contains(types, typ) {
 			continue
 		}

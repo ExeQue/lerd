@@ -5,7 +5,7 @@
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
   import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
-  import { buildKindGroups, knownDebugSites, lensEvents, facetOf, isPageView } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, lensEvents, facetOf, isPageView, isLinkedRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import CaptureOffNotice from '$components/CaptureOffNotice.svelte';
   import Dropdown from '$components/Dropdown.svelte';
@@ -53,7 +53,7 @@
   });
 
   const effectiveText = $derived(scoped ? $debugSearch : localText);
-  const happened = $derived($debugEvents.filter((ev) => !isPageView(ev)));
+  const happened = $derived($debugEvents.filter((ev) => !isPageView(ev) && !isLinkedRequest(ev)));
   const groups = $derived(buildKindGroups(happened, 'browser', scoped ? siteScope : $queryFilterSite, effectiveText, scoped, '', true, typeFilter));
   // Only the types that were actually reported, grouped and ordered the way a
   // reader scans for trouble: errors first, page events last.

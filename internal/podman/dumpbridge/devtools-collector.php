@@ -1351,3 +1351,88 @@ function http($method, $url): void
     }
     emit('http', ['method' => is_string($method) ? $method : '', 'url' => $u]);
 }
+
+// request_end reports how a web request ended and what it carried: its method,
+// URI and status, its headers, query, body and cookies, and the headers it
+// answered with. It runs at shutdown, after the response, so it costs the
+// request nothing. raw stands in for php://input in tests.
+function request_end(?string $raw = null): void
+{
+    try {
+        $start = isset($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : 0.0;
+        $code = http_response_code();
+        $headers = [];
+        foreach ($_SERVER as $k => $v) {
+            if (strncmp((string) $k, 'HTTP_', 5) === 0 && is_string($v)) {
+                $headers[ucwords(strtolower(str_replace('_', '-', substr($k, 5))), '-')] = $v;
+            }
+        }
+        unset($headers['Cookie']);
+        if (!empty($_SERVER['CONTENT_TYPE'])) {
+            $headers['Content-Type'] = (string) $_SERVER['CONTENT_TYPE'];
+        }
+        // nginx adds SPX's cookies for lerd's profiler; they are not the app's.
+        $cookies = $_COOKIE;
+        unset($cookies['SPX_KEY'], $cookies['SPX_ENABLED']);
+        $response = [];
+        foreach (headers_list() as $line) {
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2 && strcasecmp(trim($parts[0]), 'Set-Cookie') !== 0) {
+                $response[trim($parts[0])] = trim($parts[1]);
+            }
+        }
+        $data = [
+            'method'      => isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : '',
+            'uri'         => isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '',
+            'status'      => is_int($code) ? $code : 0,
+            'time_ms'     => $start > 0 ? round((microtime(true) - $start) * 1000, 3) : 0,
+            'memory_peak' => memory_get_peak_usage(true),
+        ];
+        $parts = ['headers' => $headers, 'query' => $_GET, 'body' => request_body($raw), 'cookies' => $cookies, 'response_headers' => $response];
+        foreach ($parts as $name => $values) {
+            $values = masked_tree(is_array($values) ? $values : []);
+            if ($values) {
+                $data[$name] = $values;
+            }
+        }
+        emit('request', $data);
+    } catch (\Throwable $_) {
+    }
+}
+
+// request_body is the form a request posted, or the JSON it sent, decoded.
+function request_body(?string $raw): array
+{
+    if ($_POST) {
+        return $_POST;
+    }
+    if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'json') === false) {
+        return [];
+    }
+    $raw = $raw ?? @file_get_contents('php://input', false, null, 0, 65536);
+    $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+    return is_array($data) ? $data : [];
+}
+
+// masked_tree keeps a request's values in their shape, masks any whose key
+// reads as a credential, and cuts long values, wide levels and deep nesting.
+function masked_tree(array $values, int $depth = 0): array
+{
+    $out = [];
+    foreach ($values as $k => $v) {
+        if (count($out) >= PAYLOAD_KEYS) {
+            $out['…'] = (count($values) - PAYLOAD_KEYS).' more';
+            break;
+        }
+        if (is_string($k) && preg_match('/pass|secret|token|sess|authorization|api[-_]?key/i', $k)) {
+            $out[$k] = '[redacted]';
+        } elseif (is_array($v)) {
+            $out[$k] = $depth < 5 ? masked_tree($v, $depth + 1) : '[…]';
+        } elseif (is_string($v) && strlen($v) > 500) {
+            $out[$k] = substr($v, 0, 497).'...';
+        } else {
+            $out[$k] = is_scalar($v) || $v === null ? $v : gettype($v);
+        }
+    }
+    return $out;
+}

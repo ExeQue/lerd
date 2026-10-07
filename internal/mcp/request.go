@@ -11,7 +11,7 @@ import (
 func requestTool() mcpTool {
 	return mcpTool{
 		Name:        "request",
-		Description: "A recorded request's Debug lenses, by its rid. list: recent requests with rids; lenses: count per lens; lens: one lens's events, paged.",
+		Description: "One request's Debug lenses by rid. list: recent requests and rids; lenses: counts, sent, sent_by; lens: one lens, paged.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
@@ -31,7 +31,7 @@ func requestTool() mcpTool {
 // requestLenses maps the Debug window's lens names to the event kind each
 // shows, so an assistant reads a request the way the dashboard does.
 var requestLenses = []struct{ lens, kind string }{
-	{"exceptions", "exception"}, {"logs", "log"}, {"browser", "browser"}, {"dumps", "dump"},
+	{"request", "request"}, {"exceptions", "exception"}, {"logs", "log"}, {"browser", "browser"}, {"dumps", "dump"},
 	{"queries", "query"}, {"views", "view"}, {"cache", "cache"}, {"http", "http"},
 	{"jobs", "job"}, {"messages", "message"}, {"events", "event"}, {"mail", "mail"},
 }
@@ -73,7 +73,7 @@ func execRequestTool(args map[string]any) (any, *rpcError) {
 		if errOut != nil {
 			return errOut, nil
 		}
-		return jsonOK(requestLensCounts(evs)), nil
+		return jsonOK(requestLensCounts(evs, strArg(args, "rid"))), nil
 	case "lens":
 		kind := lensKind(strArg(args, "lens"))
 		if kind == "" {
@@ -151,14 +151,25 @@ func requestEvents(rid, kind string) ([]reqEvent, map[string]any) {
 	return evs, nil
 }
 
-// requestLensCounts is what the request's lens bar shows: who served it and
-// how many events each lens holds. A page view is the page itself, not an event.
-func requestLensCounts(evs []reqEvent) map[string]any {
+// requestLensCounts is what the request's lens bar shows: who served it, how
+// many events each lens holds, the requests its page sent and the page that
+// sent it. A page view is the page itself and a sent request a link, so
+// neither counts as a browser event.
+func requestLensCounts(evs []reqEvent, rid string) map[string]any {
 	counts := map[string]int{}
+	var sent []map[string]any
 	out := map[string]any{"lenses": counts}
 	for _, e := range evs {
 		if out["site"] == nil && e.Kind != "browser" {
-			out["site"], out["request"] = e.Ctx["site"], e.Ctx["request"]
+			out["site"], out["served"] = e.Ctx["site"], e.Ctx["request"]
+		}
+		if e.Kind == "browser" && e.Data["type"] == "request" {
+			if e.Data["rid"] == rid {
+				out["sent_by"] = map[string]any{"rid": e.Ctx["rid"], "page": e.Ctx["request"]}
+			} else {
+				sent = append(sent, map[string]any{"rid": e.Data["rid"], "method": e.Data["method"], "url": e.Data["request"], "status": e.Data["status"]})
+			}
+			continue
 		}
 		if e.Kind == "browser" && e.Data["type"] == "navigation" {
 			continue
@@ -168,6 +179,9 @@ func requestLensCounts(evs []reqEvent) map[string]any {
 				counts[l.lens]++
 			}
 		}
+	}
+	if len(sent) > 0 {
+		out["sent"] = sent
 	}
 	if len(evs) == 0 {
 		out["hint"] = "Nothing captured for this id; it may have left the buffer."

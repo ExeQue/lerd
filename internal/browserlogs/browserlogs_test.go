@@ -329,3 +329,15 @@ func TestSummarize_GroupsPerPageViewAndFiltersByType(t *testing.T) {
 		t.Fatalf("filtered = %+v", errs.PageViews)
 	}
 }
+
+// The requests a page sent stay out of the summary unless asked for by type.
+func TestSummarize_LeavesLinkedRequestsOutUnlessAsked(t *testing.T) {
+	data := []byte(`{"type":"request","message":"200 GET /api","rid":"r9"}`)
+	evs := []dumps.Event{{ID: "a", Kind: dumps.KindBrowser, Ctx: dumps.Context{RID: "p1"}, Data: data}}
+	if s := Summarize(evs, nil); len(s.PageViews) != 0 {
+		t.Errorf("default summary = %+v", s.PageViews)
+	}
+	if s := Summarize(evs, []string{"request"}); len(s.PageViews) != 1 || s.PageViews[0].Events[0].RID != "r9" {
+		t.Errorf("asked for requests = %+v", s.PageViews)
+	}
+}

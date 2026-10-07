@@ -33,6 +33,9 @@ const (
 	// KindBrowser is a JavaScript error, console message or failed request
 	// posted by the browser logs script rather than sent by PHP.
 	KindBrowser = "browser"
+	// KindRequest is how a web request ended and what it carried: method, URI,
+	// status, headers, query, body and cookies, sent once at shutdown.
+	KindRequest = "request"
 )
 
 // Source identifies the file:line that produced a dump.

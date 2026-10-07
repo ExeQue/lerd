@@ -67,15 +67,26 @@ function row(ev: DumpEvent): Omit<WaterfallRow, 'start' | 'end'> & { took: numbe
   }
 }
 
+// reportedRequest is the request as PHP reported it ending, for a request
+// nginx's access feed did not time.
+function reportedRequest(events: DumpEvent[]): ServedRequest | undefined {
+  const ev = events.find((e) => e.kind === 'request');
+  if (!ev) return undefined;
+  const d = (ev.data ?? {}) as { method?: string; uri?: string; time_ms?: number };
+  const millis = Number(d.time_ms ?? 0);
+  return { label: `${d.method ?? ''} ${d.uri ?? ''}`.trim(), start: Date.parse(ev.ts) - millis, millis };
+}
+
 // buildWaterfall lays a request's captured events on one chronological list,
 // under the request itself when nginx timed it. Browser events happen on the
 // page after the response, so they stay in the Browser lens.
 export function buildWaterfall(events: DumpEvent[], served?: ServedRequest): Waterfall {
+  served = served ?? reportedRequest(events);
   const rows: WaterfallRow[] = [];
   const t0 = served?.start ?? Math.min(...events.map((ev) => Date.parse(ev.ts)));
   if (served) rows.push({ label: served.label, layer: 'request', start: 0, end: served.millis, note: ms(served.millis) });
   for (const ev of events) {
-    if (ev.kind === 'browser') continue;
+    if (ev.kind === 'browser' || ev.kind === 'request') continue;
     const { took, ...r } = row(ev);
     const end = Date.parse(ev.ts) - t0;
     rows.push({ ...r, start: end - took, end });

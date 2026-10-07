@@ -10,7 +10,8 @@ const requestEventsBody = `[
 	{"ts":"2026-10-07T10:00:00.000Z","kind":"browser","ctx":{"type":"browser","site":"acme","rid":"r1"},"data":{"type":"navigation"}},
 	{"ts":"2026-10-07T10:00:00.010Z","kind":"query","ctx":{"type":"fpm","site":"acme","request":"GET /cart","rid":"r1"},"src":{"file":"/app/Cart.php","line":12},"data":{"sql":"select 1","time_ms":2,"trace":[{"file":"x"}]}},
 	{"ts":"2026-10-07T10:00:00.020Z","kind":"query","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"sql":"select 2"}},
-	{"ts":"2026-10-07T10:00:00.030Z","kind":"log","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"level":"error"}}
+	{"ts":"2026-10-07T10:00:00.030Z","kind":"log","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"level":"error"}},
+	{"ts":"2026-10-07T10:00:00.040Z","kind":"request","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"method":"GET","uri":"/cart","status":200,"headers":{"Accept":"text/html"}}}
 ]`
 
 // The lens bar an assistant reads names the request and counts each lens the
@@ -22,7 +23,7 @@ func TestRequestTool_LensesCountsEachLens(t *testing.T) {
 		t.Errorf("path = %q", *path)
 	}
 	text := toolText(got)
-	for _, want := range []string{`"queries":2`, `"logs":1`, `"request":"GET /cart"`} {
+	for _, want := range []string{`"queries":2`, `"logs":1`, `"request":1`, `"served":"GET /cart"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %s in %s", want, text)
 		}
@@ -73,5 +74,21 @@ func TestRecentInLastHour(t *testing.T) {
 	}
 	if got := recentInLastHour(rows, now, 1); len(got) != 1 {
 		t.Errorf("limit 1 = %d rows", len(got))
+	}
+}
+
+// A page's inspector names the requests it sent, and a sent request names the
+// page that sent it, both readable by rid; neither counts as a browser event.
+func TestRequestTool_LensesLinkPagesAndTheRequestsTheySent(t *testing.T) {
+	stubRoundTrip(t, `[
+		{"ts":"2026-10-07T10:00:00.000Z","kind":"browser","ctx":{"type":"browser","site":"acme","rid":"page-1","request":"https://acme.test/cart"},"data":{"type":"request","rid":"api-1","method":"POST","request":"/api/cart","status":201}}
+	]`)
+	page, _ := execRequestTool(map[string]any{"action": "lenses", "rid": "page-1"})
+	if text := toolText(page); !strings.Contains(text, `"sent":[{"method":"POST","rid":"api-1","status":201,"url":"/api/cart"}]`) || strings.Contains(text, `"browser"`) {
+		t.Errorf("page = %s", text)
+	}
+	api, _ := execRequestTool(map[string]any{"action": "lenses", "rid": "api-1"})
+	if text := toolText(api); !strings.Contains(text, `"sent_by":{"page":"https://acme.test/cart","rid":"page-1"}`) {
+		t.Errorf("sent request = %s", text)
 	}
 }

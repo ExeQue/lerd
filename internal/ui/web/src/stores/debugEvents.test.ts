@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestChoices, requestEvents } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestChoices, requestEvents, sentRequests, sentBy } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -165,5 +165,24 @@ describe('a pinned request', () => {
   it('starts from what the server kept and adds what the stream brought since', () => {
     const got = requestEvents([at('2'), at('3')], 'r1', [at('1'), at('2'), at('4', true)], false);
     expect(got.map((e) => e.id)).toEqual(['1', '2', '3']);
+  });
+});
+
+describe('linked requests', () => {
+  const linked = (page: string, rid: string) =>
+    ({ v: 1, id: rid, ts: '2026-10-07T10:00:01.000Z', kind: 'browser', ctx: { type: 'browser', site: 'acme', rid: page, request: 'https://acme.test/cart' }, src: {}, data: { type: 'request', method: 'POST', request: '/api/cart', status: 201, rid, duration_ms: 40, at: '2026-10-07T10:00:00.900Z' } }) as unknown as DumpEvent;
+
+  it('lists what a page sent and names the page a request came from', () => {
+    const evs = [linked('page-1', 'api-1'), linked('page-1', 'api-2'), linked('page-2', 'api-3')];
+    expect(sentRequests(evs, 'page-1')).toEqual([
+      { rid: 'api-1', label: 'POST /api/cart', status: 201, start: Date.parse('2026-10-07T10:00:00.860Z'), millis: 40 },
+      { rid: 'api-2', label: 'POST /api/cart', status: 201, start: Date.parse('2026-10-07T10:00:00.860Z'), millis: 40 }
+    ]);
+    expect(sentBy(evs, 'api-3')).toEqual({ rid: 'page-2', label: 'https://acme.test/cart' });
+    expect(sentBy(evs, 'page-1')).toBeNull();
+  });
+
+  it('does not count a sent request as a browser event', () => {
+    expect(countKinds([linked('page-1', 'api-1')], 'acme')).toEqual({});
   });
 });

@@ -38,6 +38,19 @@ describe('buildWaterfall', () => {
   });
 });
 
+describe('buildWaterfall without nginx', () => {
+  it('takes the request bar from the request event PHP reported, not as a dump', () => {
+    const w = buildWaterfall([
+      e('query', '2026-10-07T10:00:00.040Z', { sql: 'select 1', time_ms: 10 }),
+      { ...e('request', '2026-10-07T10:00:00.100Z', { method: 'POST', uri: '/orders', time_ms: 100 }), ctx: { type: 'fpm' } } as DumpEvent
+    ]);
+    expect(w.rows.map((r) => [r.layer, r.label, r.start, r.end])).toEqual([
+      ['request', 'POST /orders', 0, 100],
+      ['query', 'select 1', 30, 40]
+    ]);
+  });
+});
+
 describe('condense', () => {
   it('folds a run of one layer into a row that lists them', () => {
     const rows = condense([

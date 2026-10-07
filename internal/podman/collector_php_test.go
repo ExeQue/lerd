@@ -1098,3 +1098,58 @@ namespace {
 		t.Errorf("data = %+v, want the record's level, channel and message", e.Data)
 	}
 }
+
+// A web request reports at shutdown what it carried, for the Request tab of its
+// inspector: headers, query, a JSON or form body and cookies, with anything that
+// reads as a credential masked.
+func TestCollectorPHP_RequestEndReportsWhatTheRequestCarried(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_SERVER['REQUEST_URI'] = '/orders?page=2';
+$_SERVER['HTTP_ACCEPT'] = 'application/json';
+$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer abc';
+$_SERVER['HTTP_COOKIE'] = 'a=b';
+$_SERVER['CONTENT_TYPE'] = 'application/json';
+$_GET = ['page' => '2'];
+$_COOKIE = ['theme' => 'dark', 'laravel_session' => 'xyz', 'SPX_KEY' => 'k', 'SPX_ENABLED' => '1'];
+require COLLECTOR;
+\Lerd\Collector\request_end('{"name":"Ada","password":"hunter2","items":[{"sku":"A1"}]}');
+`)
+	var req struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Method  string            `json:"method"`
+			URI     string            `json:"uri"`
+			Headers map[string]string `json:"headers"`
+			Query   map[string]string `json:"query"`
+			Cookies map[string]string `json:"cookies"`
+			Body    map[string]any    `json:"body"`
+		} `json:"data"`
+	}
+	for _, line := range got {
+		if strings.Contains(line, `"kind":"request"`) {
+			if err := json.Unmarshal([]byte(line), &req); err != nil {
+				t.Fatalf("bad JSON line %q: %v", line, err)
+			}
+		}
+	}
+	d := req.Data
+	if req.Kind != "request" || d.Method != "POST" || d.URI != "/orders?page=2" || d.Query["page"] != "2" {
+		t.Fatalf("request = %+v (lines %v)", req, got)
+	}
+	if d.Headers["Accept"] != "application/json" || d.Headers["Authorization"] != "[redacted]" || d.Headers["Content-Type"] != "application/json" {
+		t.Errorf("headers = %v", d.Headers)
+	}
+	if _, ok := d.Headers["Cookie"]; ok {
+		t.Errorf("the cookie header is listed as cookies, not a header: %v", d.Headers)
+	}
+	if d.Cookies["theme"] != "dark" || d.Cookies["laravel_session"] != "[redacted]" || len(d.Cookies) != 2 {
+		t.Errorf("cookies = %v", d.Cookies)
+	}
+	if d.Body["name"] != "Ada" || d.Body["password"] != "[redacted]" {
+		t.Errorf("body = %v", d.Body)
+	}
+	if items, _ := d.Body["items"].([]any); len(items) != 1 {
+		t.Errorf("a nested body keeps its shape: %v", d.Body)
+	}
+}

@@ -75,11 +75,18 @@ export function isPageView(ev: DumpEvent): boolean {
   return ev.kind === 'browser' && (ev.data as { type?: string } | undefined)?.type === 'navigation';
 }
 
+// isLinkedRequest marks a fetch or XHR a page sent that named the PHP request
+// it reached. It links the two requests rather than saying what went wrong, so
+// it is listed with the request's children, not counted as a browser event.
+export function isLinkedRequest(ev: DumpEvent): boolean {
+  return ev.kind === 'browser' && (ev.data as { type?: string } | undefined)?.type === 'request';
+}
+
 export function countKinds(events: DumpEvent[], site = ''): Record<string, number> {
   const c: Record<string, number> = {};
   for (const ev of events) {
     if (site && ev.ctx.site !== site) continue;
-    if (isPageView(ev)) continue;
+    if (isPageView(ev) || isLinkedRequest(ev)) continue;
     c[ev.kind] = (c[ev.kind] ?? 0) + 1;
   }
   return c;
@@ -152,4 +159,38 @@ export function scopeLensEvents(rid: Readable<string>, fetched: Readable<DumpEve
 // lensEvents is the stream a lens renders: its scope's, or every event.
 export function lensEvents(): Readable<DumpEvent[]> {
   return getContext<Readable<DumpEvent[]> | undefined>(SCOPE) ?? debugEvents;
+}
+
+// LinkedRequest is one end of a link between two requests: a page and a
+// request it sent.
+export interface LinkedRequest {
+  rid: string;
+  label: string;
+  status?: number;
+  // start and millis place a sent request on the browser's clock, from when
+  // the page sent it to when its response arrived.
+  start?: number;
+  millis?: number;
+}
+
+type Linked = { method?: string; request?: string; status?: number; rid?: string; duration_ms?: number; at?: string };
+
+// sentRequests are the requests a page sent that named the PHP request they
+// reached, oldest first.
+export function sentRequests(events: DumpEvent[], rid: string): LinkedRequest[] {
+  return events
+    .filter((ev) => isLinkedRequest(ev) && ev.ctx.rid === rid)
+    .map((ev) => {
+      const d = ev.data as Linked;
+      const millis = Number(d.duration_ms ?? 0);
+      const end = Date.parse(d.at ?? ev.ts);
+      return { rid: d.rid ?? '', label: `${d.method ?? 'GET'} ${d.request ?? ''}`, status: d.status, start: end - millis, millis };
+    })
+    .filter((r) => r.rid !== '');
+}
+
+// sentBy is the page that sent a request, when it reported doing so.
+export function sentBy(events: DumpEvent[], rid: string): LinkedRequest | null {
+  const ev = events.find((e) => isLinkedRequest(e) && (e.data as Linked).rid === rid && e.ctx.rid);
+  return ev ? { rid: ev.ctx.rid ?? '', label: ev.ctx.request ?? ev.ctx.rid ?? '' } : null;
 }

@@ -7,6 +7,8 @@
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
   import RequestTimeline from '$components/RequestTimeline.svelte';
+  import RequestLens from '$components/RequestLens.svelte';
+  import LinkedRequests from '$components/LinkedRequests.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import { writable } from 'svelte/store';
   import { apiJson } from '$lib/api';
@@ -15,7 +17,7 @@
   import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
   import { refreshStatus, startDumpsStream, stopDumpsStream } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
-  import { countKinds, debugEvents, requestChoices, scopeLensEvents } from '$stores/debugEvents';
+  import { countKinds, debugEvents, requestChoices, scopeLensEvents, sentBy, sentRequests, type LinkedRequest } from '$stores/debugEvents';
   import Icon from '$components/Icon.svelte';
   import { modal } from '$stores/modals';
   import { tooltip } from '$lib/tooltip';
@@ -41,8 +43,11 @@
     // does; served is that request as nginx timed it, for the timeline.
     rid?: string;
     served?: ServedRequest;
+    // onopen opens a linked request, the page that sent this one or one it
+    // sent; without it the Debug tab's own filter switches to it.
+    onopen?: (r: LinkedRequest) => void;
   }
-  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true, rid = '', served }: Props = $props();
+  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true, rid = '', served, onopen }: Props = $props();
 
   // Without a pinned request, a filter over the lenses picks one, all by
   // default. A picked request gains a timeline of what it did.
@@ -62,9 +67,11 @@
   $effect(() => {
     if (picked && !choices.some((c) => c.rid === picked)) picked = '';
   });
-  let timeline = $state(Boolean(rid));
-  const showTimeline = $derived(timeline && Boolean(rid || picked));
-  const waterfall = $derived(showTimeline ? buildWaterfall($events, rid ? served : undefined) : null);
+  // The timeline and the request's own tab exist only for one request, so
+  // which of them is open is held here rather than in the remembered lens.
+  let own = $state<'' | 'timeline' | 'request' | 'linked'>(rid ? 'timeline' : '');
+  const ownTab = $derived(rid || picked ? own : '');
+  const waterfall = $derived(ownTab === 'timeline' ? buildWaterfall($events, rid ? served : undefined) : null);
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
   // sites; everything else is framework-agnostic (PDO and the Symfony
@@ -72,15 +79,28 @@
   const isLaravel = $derived(framework.toLowerCase() === 'laravel');
   const laravelOnly: DebugLens[] = ['cache'];
   const counts = $derived(countKinds($events, siteName));
+  const linkedCount = $derived(rid || picked ? sentRequests($events, rid || picked).length + (sentBy($events, rid || picked) ? 1 : 0) : 0);
 
   const tabs = $derived([
-    ...(rid || picked ? [{ id: 'timeline', label: m.debug_tab_timeline(), group: 'timeline' }] : []),
+    ...(rid || picked
+      ? [
+          { id: 'timeline', label: m.debug_tab_timeline(), group: 'timeline' },
+          { id: 'request', label: m.debug_tab_request(), group: 'timeline' },
+          { id: 'linked', label: m.debug_tab_linked(), count: linkedCount || undefined, group: 'timeline' }
+        ]
+      : []),
     ...debugLensTabs(counts, isLaravel)
   ]);
-  const active = $derived(showTimeline ? 'timeline' : $debugLens);
+  // In the Debug tab a linked request opens through the filter, which only
+  // lists this site's requests.
+  function openLinked(r: LinkedRequest) {
+    if (onopen) onopen(r);
+    else if (choices.some((c) => c.rid === r.rid)) picked = r.rid;
+  }
+  const active = $derived(ownTab || $debugLens);
   function pick(id: string) {
-    timeline = id === 'timeline';
-    if (!timeline) debugLens.set(id as DebugLens);
+    own = id === 'timeline' || id === 'request' || id === 'linked' ? id : '';
+    if (!own) debugLens.set(id as DebugLens);
   }
 
   // A site without PHP keeps the lens bar, with Browser as its only lens.
@@ -141,6 +161,10 @@
     <div class="flex-1 min-h-0 overflow-hidden">
       {#if waterfall}
         <RequestTimeline {waterfall} />
+      {:else if ownTab === 'request'}
+        <RequestLens />
+      {:else if ownTab === 'linked'}
+        <LinkedRequests rid={rid || picked} onopen={openLinked} />
       {:else if $debugLens === 'browser'}
         <BrowserLens siteScope={siteName} />
       {:else if $debugLens === 'dumps'}
