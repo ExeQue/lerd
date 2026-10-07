@@ -125,3 +125,31 @@ func TestTeardownSite_RemovesProvidedEnv(t *testing.T) {
 		t.Errorf("provided env should be removed on unlink: %v", err)
 	}
 }
+
+// A reboot empties tmpfs and systemd starts the sites without lerd start, so
+// the watcher's RestoreProvidedEnv is what writes the files again.
+func TestRestoreProvidedEnv_RefillsActiveSitesOnly(t *testing.T) {
+	provider := "printf 'SECRET=x\\n'"
+	site := providerSite(t, provider)
+	paused := config.Site{Name: "paused", Path: t.TempDir(), Paused: true}
+	if err := config.SaveProjectConfig(paused.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{site, paused}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []config.Site{site, paused} {
+		if err := config.ApproveSiteCommand(s.Name, provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); err != nil {
+		t.Errorf("active site's provided env not restored: %v", err)
+	}
+	if _, err := os.Stat(config.ProvidedEnvFile(paused.Name)); !os.IsNotExist(err) {
+		t.Errorf("a paused site's provider must not run: %v", err)
+	}
+}

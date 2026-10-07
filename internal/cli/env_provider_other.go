@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 func providedEnvSupported() error {
@@ -23,6 +24,24 @@ func ensureProvidedEnvDir() {}
 
 // beginProvidedEnvPass is a no-op here: dropping a local file costs no ssh.
 func beginProvidedEnvPass() func() { return func() {} }
+
+// RestoreProvidedEnv runs every active site's env_provider. systemd starts FPM
+// and the workers on boot without lerd start, so the watcher calls this on its
+// own start to refill the files a reboot emptied from tmpfs.
+func RestoreProvidedEnv() {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return
+	}
+	for _, s := range reg.Sites {
+		if s.Paused || s.Ignored {
+			continue
+		}
+		if err := refreshProvidedEnv(s, false); err != nil {
+			feedback.Warn("%s: %v", s.Name, err)
+		}
+	}
+}
 
 func storeProvidedEnv(siteName string, data []byte) error {
 	return writeProvidedEnv(config.ProvidedEnvFile(siteName), data)
