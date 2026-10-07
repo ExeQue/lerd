@@ -1,10 +1,10 @@
 <script lang="ts">
   import Dropdown from '$components/Dropdown.svelte';
-  import { status as dumpsStatusValue, refreshStatus, togglePassthrough, setDumpsBuffer } from '$stores/dumps';
+  import { status as dumpsStatusValue, setDumpsBuffer } from '$stores/dumps';
   import { m } from '../../paraglide/messages.js';
 
-  // The Debug window's own settings: where dumps go and how many events
-  // lerd-ui keeps for the lenses.
+  // The Debug window's own settings: how many events lerd-ui keeps for the
+  // lenses.
 
   // Buffer sizes offered, from the floor to the ceiling lerd-ui allows, each
   // with what it costs at about 4.5 KB an event.
@@ -25,37 +25,9 @@
       bufferError = e instanceof Error ? e.message : String(e);
     }
   }
-
-  let switchingPassthrough = $state(false);
-  async function flipPassthrough() {
-    if (switchingPassthrough) return;
-    switchingPassthrough = true;
-    try {
-      await togglePassthrough(!$dumpsStatusValue?.passthrough);
-      await refreshStatus();
-    } finally {
-      switchingPassthrough = false;
-    }
-  }
 </script>
 
 <div class="px-3 sm:px-5 py-4 space-y-5 text-xs text-gray-600 dark:text-gray-300 max-w-2xl">
-  <div class="space-y-1.5">
-    <label class="inline-flex items-center gap-2 cursor-pointer select-none font-medium text-gray-800 dark:text-gray-100">
-      <input
-        type="checkbox"
-        class="rounded-sm border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card text-lerd-red focus:ring-lerd-red"
-        checked={Boolean($dumpsStatusValue?.passthrough)}
-        disabled={switchingPassthrough}
-        onchange={flipPassthrough}
-      />
-      {m.dumps_bridge_passthrough()}
-    </label>
-    <p class="text-[11px] {switchingPassthrough ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}">
-      {switchingPassthrough ? m.dumps_bridge_passthroughRestarting() : m.dumps_bridge_passthroughHint()}
-    </p>
-  </div>
-
   {#if $dumpsStatusValue?.capacity}
     <div class="space-y-1.5">
       <div class="flex items-center gap-2 flex-wrap font-medium text-gray-800 dark:text-gray-100">
