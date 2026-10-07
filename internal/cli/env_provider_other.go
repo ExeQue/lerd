@@ -31,6 +31,7 @@ func beginProvidedEnvPass() func() { return func() {} }
 func RestoreProvidedEnv() {
 	reg, err := config.LoadSites()
 	if err != nil {
+		feedback.Warn("env_provider restore: %v", err)
 		return
 	}
 	for _, s := range reg.Sites {
